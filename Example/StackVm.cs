@@ -1,12 +1,11 @@
 using VirtualMachine.Processor;
 
-namespace VirtualMachine.Example
+namespace VirtualMachine.Example.Stack
 {
     namespace Instructions {
         public class Push : Instruction.Instruction<Stack<int>> {
             public override byte OpCode { get; } = 0x01;
             public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
-                Console.WriteLine(vm);
                 var state = vm.State;
                 var stack = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 4);
@@ -14,7 +13,6 @@ namespace VirtualMachine.Example
                 int value = BitConverter.ToInt32(span);
                 state.ProgramCounter += 4;
                 stack.Push(value);
-                Console.WriteLine(vm);
                 return vm;
             }
         }
@@ -109,16 +107,6 @@ namespace VirtualMachine.Example
             }
         }
 
-        public class Dup : Instruction.Instruction<Stack<int>> {
-            public override byte OpCode { get; } = 0x0b;
-            public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
-                var state = vm.State;
-                var stack = state.Holder;
-                stack.Push(stack.Peek());
-                return vm;
-            }
-        }
-
         public class Halt : Instruction.Instruction<Stack<int>> {
             public override byte OpCode { get; } = 0xff;
             public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
@@ -163,7 +151,6 @@ namespace VirtualMachine.Example
             new Instructions.Or(),
             new Instructions.Xor(),
             new Instructions.Not(),
-            new Instructions.Dup(),
             new Instructions.Pop(),
             new Instructions.Halt(),
             new Instructions.Jump(),
@@ -181,8 +168,8 @@ namespace VirtualMachine.Example
         }
     }
 
-    public record StackVirtualMachine : IVirtualMachine<Stack<int>> {
-        public StackVirtualMachine(Instruction.Instruction<Stack<int>>[] instructionsSet) {
+    public record VirtualMachine : IVirtualMachine<Stack<int>> {
+        public VirtualMachine(Instruction.Instruction<Stack<int>>[] instructionsSet) {
             int maxOpCode = instructionsSet.Max(i => i.OpCode);
             if(maxOpCode > 0xff) throw new Exception("Invalid OpCode");
 
