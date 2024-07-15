@@ -1,5 +1,5 @@
-* Stack Based Virtual Machine using the HuskVM infra :
-** Use :  
+# Stack Based Virtual Machine using the HuskVM infra :
+## Use :  
 ```cs
 IVirtualMachine<Stack<int>> s_vm = new VirtualMachine.Example.Stack.VirtualMachine();
 s_vm.LoadProgram([
@@ -12,7 +12,7 @@ s_vm.LoadProgram([
 ]);
 s_vm = s_vm.Run();
 ```
-** Instructions : 
+## Instructions : 
 ```cs
 namespace Instructions {
     public class Push : Instruction.Instruction<Stack<int>> {
@@ -51,8 +51,8 @@ namespace Instructions {
 }
 ```
 
-* Register Based Virtual Machine using the HuskVM infra :
-** Use :  
+# Register Based Virtual Machine using the HuskVM infra :
+## Use :  
 ```cs
 IVirtualMachine<Registers> r_vm = new VirtualMachine.Example.Register.VirtualMachine();
 r_vm.LoadProgram([
@@ -63,7 +63,7 @@ r_vm.LoadProgram([
 ]);
 r_vm = r_vm.Run();
 ```
-** Instructions : 
+## Instructions : 
 ```cs
 namespace Instructions {
     public class Mov : Instruction.Instruction<Registers> {
@@ -105,7 +105,7 @@ namespace Instructions {
 }
 ```
 
-* Creating an Instance of VM type : 
+# Creating an Instance of VM type : 
 ```cs
 // stack based VM
 public class VirtualMachine() : BaseVirtualMachine<Stack<int>>(InstructionSet<Stack<int>>.Opcodes, new StackState()) ;
