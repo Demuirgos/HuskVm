@@ -1,3 +1,4 @@
+using VirtualMachine.Instruction;
 using VirtualMachine.Processor;
 
 namespace VirtualMachine.Example.Stack
@@ -22,7 +23,7 @@ namespace VirtualMachine.Example.Stack
             public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
                 var state = vm.State;
                 var stack = state.Holder;
-                state.Memory[stack.Pop()] = stack.Pop();
+                _ = stack.Pop();
                 return vm;
             }
         }
@@ -136,51 +137,53 @@ namespace VirtualMachine.Example.Stack
                 return vm;
             }
         }
-    }
 
-    public static class InstructionSet  
-    {
-        public static Instruction.Instruction<Stack<int>>[] Instructions = [
-            new Instructions.Push(),
-            new Instructions.Pop(),
-            new Instructions.Add(),
-            new Instructions.Sub(),
-            new Instructions.Mul(),
-            new Instructions.Div(),
-            new Instructions.And(),
-            new Instructions.Or(),
-            new Instructions.Xor(),
-            new Instructions.Not(),
-            new Instructions.Pop(),
-            new Instructions.Halt(),
-            new Instructions.Jump(),
-            new Instructions.JumpIfZero()
-        ];
+        public class Load : Instruction.Instruction<Stack<int>> {
+            public override byte OpCode { get; } = 0x0e;
+            public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
+                var state = vm.State;
+                var stack = state.Holder;
+                stack.Push(state.Memory[stack.Pop()]);
+                return vm;
+            }
+        }
+
+        public class Store : Instruction.Instruction<Stack<int>> {
+            public override byte OpCode { get; } = 0x0f;
+            public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
+                var state = vm.State;
+                var stack = state.Holder;
+                state.Memory[stack.Pop()] = stack.Pop();
+                return vm;
+            }
+        }
+
+        public class Dup : Instruction.Instruction<Stack<int>> {
+            public override byte OpCode { get; } = 0x10;
+            public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
+                var state = vm.State;
+                var stack = state.Holder;
+                stack.Push(stack.Peek());
+                return vm;
+            }
+        }
     }
     public record StackState() : IState<Stack<int>> {
         public Stack<int> Holder { get; set; } = new Stack<int>();
         public int ProgramCounter { get; set; } = 0;
-        public int[] Memory { get; set; } = new int[1024];
+        public int[] Memory { get; set; } = new int[16];
         public byte[] Program { get; set; }
 
         public override string ToString() {
-            return $"ProgramCounter: {ProgramCounter}, Stack: {string.Join(", ", Holder)}";
+            return $"ProgramCounter: {ProgramCounter}, Stack: {string.Join(", ", Holder)}, Memory: {string.Join(", ", Memory)}";
         }
     }
 
-    public record VirtualMachine : IVirtualMachine<Stack<int>> {
-        public VirtualMachine(Instruction.Instruction<Stack<int>>[] instructionsSet) {
-            int maxOpCode = instructionsSet.Max(i => i.OpCode);
-            if(maxOpCode > 0xff) throw new Exception("Invalid OpCode");
-
-            InstructionsSet = new Instruction.Instruction<Stack<int>>[maxOpCode + 1];
-            foreach (var instruction in instructionsSet) {
-                InstructionsSet[instruction.OpCode] = instruction;
-            }
-            State = new StackState();
+    public class VirtualMachine : BaseVirtualMachine<Stack<int>> {
+        public VirtualMachine() 
+            : base(InstructionSet<Stack<int>>.Opcodes, new StackState())
+        {
         }
-        public Instruction.Instruction<Stack<int>>[] InstructionsSet { get; set; }
-        public IState<Stack<int>> State { get; set; }
 
         public override string ToString() {
             return State.ToString();
