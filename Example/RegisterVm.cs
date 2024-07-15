@@ -9,12 +9,11 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x01;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
-                var Registers = state.Program[state.ProgramCounter++];
-                // parse the next 4 bytes as an int
+                var Registers = state.Holder;
+                var Register = state.Program[state.ProgramCounter++];
                 var span = state.Program.AsSpan(state.ProgramCounter, 4);
                 span.Reverse();
-                Registerss[Registers] = BitConverter.ToInt32(span);
+                Registers[Register] = BitConverter.ToInt32(span);
                 state.ProgramCounter += 4;
                 return vm;
             }
@@ -24,13 +23,13 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x02;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 3);
-                int Registers = span[0];
-                int value1 = Registerss[span[1]];
-                int value2 = Registerss[span[2]];
+                int Register = span[0];
+                int value1 = Registers[span[1]];
+                int value2 = Registers[span[2]];
                 state.ProgramCounter += 3;
-                Registerss[Registers] = value1 + value2;
+                Registers[Register] = value1 + value2;
                 return vm;
             }
         }
@@ -39,13 +38,13 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x03;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 3);
-                int Registers = span[0];
-                int value1 = Registerss[span[1]];
-                int value2 = Registerss[span[2]];
+                int Register = span[0];
+                int value1 = Registers[span[1]];
+                int value2 = Registers[span[2]];
                 state.ProgramCounter += 3;
-                Registerss[Registers] = value1 - value2;
+                Registers[Register] = value1 - value2;
                 return vm;
             }
         }
@@ -54,13 +53,13 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x04;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 3);
-                int Registers = span[0];
-                int value1 = Registerss[span[1]];
-                int value2 = Registerss[span[2]];
+                int Register = span[0];
+                int value1 = Registers[span[1]];
+                int value2 = Registers[span[2]];
                 state.ProgramCounter += 3;
-                Registerss[Registers] = value1 * value2;
+                Registers[Register] = value1 * value2;
                 return vm;
             }
         }
@@ -69,13 +68,13 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x05;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 3);
-                int Registers = span[0];
-                int value1 = Registerss[span[1]];
-                int value2 = Registerss[span[2]];
+                int Register = span[0];
+                int value1 = Registers[span[1]];
+                int value2 = Registers[span[2]];
                 state.ProgramCounter += 3;
-                Registerss[Registers] = value1 / value2;
+                Registers[Register] = value1 / value2;
                 return vm;
             }
         }
@@ -84,13 +83,13 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x06;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 3);
-                int Registers = span[0];
-                int value1 = Registerss[span[1]];
-                int value2 = Registerss[span[2]];
+                int Register = span[0];
+                int value1 = Registers[span[1]];
+                int value2 = Registers[span[2]];
                 state.ProgramCounter += 3;
-                Registerss[Registers] = value1 & value2;
+                Registers[Register] = value1 & value2;
                 return vm;
             }
         }
@@ -99,13 +98,13 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x07;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 3);
-                int Registers = span[0];
-                int value1 = Registerss[span[1]];
-                int value2 = Registerss[span[2]];
+                int Register = span[0];
+                int value1 = Registers[span[1]];
+                int value2 = Registers[span[2]];
                 state.ProgramCounter += 3;
-                Registerss[Registers] = value1 | value2;
+                Registers[Register] = value1 | value2;
                 return vm;
             }
         }
@@ -114,13 +113,13 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x08;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 3);
-                int Registers = span[0];
-                int value1 = Registerss[span[1]];
-                int value2 = Registerss[span[2]];
+                int Register = span[0];
+                int value1 = Registers[span[1]];
+                int value2 = Registers[span[2]];
                 state.ProgramCounter += 3;
-                Registerss[Registers] = value1 ^ value2;
+                Registers[Register] = value1 ^ value2;
                 return vm;
             }
         }
@@ -129,12 +128,12 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x09;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 2);
-                int Registers = span[0];
-                int value = Registerss[span[1]];
+                int Register = span[0];
+                int value = Registers[span[1]];
                 state.ProgramCounter += 2;
-                Registerss[Registers] = ~value;
+                Registers[Register] = ~value;
                 return vm;
             }
         }
@@ -143,7 +142,7 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x06;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 1);
                 int value = span[0];
                 state.ProgramCounter = value;
@@ -155,7 +154,7 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x07;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 2);
                 int condition = span[0];
                 int value = span[1];
@@ -172,12 +171,12 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x0a;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 2);
-                int Registers = span[0];
+                int Register = span[0];
                 int address = span[1];
                 state.ProgramCounter += 2;
-                Registerss[Registers] = state.Memory[address];
+                Registers[Register] = state.Memory[address];
                 return vm;
             }
         }
@@ -186,12 +185,12 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x0b;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 2);
-                int Registers = span[0];
+                int Register = span[0];
                 int address = span[1];
                 state.ProgramCounter += 2;
-                state.Memory[address] = Registerss[Registers];
+                state.Memory[address] = Registers[Register];
                 return vm;
             }
         }
@@ -200,12 +199,12 @@ namespace VirtualMachine.Example.Register
             public override byte OpCode { get; } = 0x0c;
             public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
                 var state = vm.State;
-                var Registerss = state.Holder;
+                var Registers = state.Holder;
                 var span = state.Program.AsSpan(state.ProgramCounter, 2);
                 int src = span[0];
                 int dest = span[1];
                 state.ProgramCounter += 2;  
-                Registerss[dest] = Registerss[src];
+                Registers[dest] = Registers[src];
                 return vm;
             }
         }
@@ -227,7 +226,7 @@ namespace VirtualMachine.Example.Register
         }
 
         public override string ToString() {
-            return string.Join(", ", Items);
+            return "[" + string.Join(", ", Items) + "]";
         }
     }
 
@@ -238,7 +237,7 @@ namespace VirtualMachine.Example.Register
         public byte[] Program { get; set; }
 
         public override string ToString() {
-            return $"ProgramCounter: {ProgramCounter}, Registerss: {Holder}, Memory: {string.Join(", ", Memory)}";
+            return $"ProgramCounter: {ProgramCounter}, Registers: {Holder}, Memory: [{string.Join(", ", Memory)}]";
         }
     }
 

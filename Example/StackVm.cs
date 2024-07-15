@@ -175,7 +175,7 @@ namespace VirtualMachine.Example.Stack
         public byte[] Program { get; set; }
 
         public override string ToString() {
-            return $"ProgramCounter: {ProgramCounter}, Stack: {string.Join(", ", Holder)}, Memory: {string.Join(", ", Memory)}";
+            return $"ProgramCounter: {ProgramCounter}, Stack: [{string.Join(", ", Holder)}], Memory: [{string.Join(", ", Memory)}]";
         }
     }
 
