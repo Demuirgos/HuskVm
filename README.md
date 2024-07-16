@@ -114,3 +114,14 @@ public class VirtualMachine() : BaseVirtualMachine<Stack<int>>(InstructionSet<St
 public class VirtualMachine() : BaseVirtualMachine<Registers>(InstructionSet<Registers>.Opcodes, new RegistersState());
 
 ```
+# Using Bytecode Parser : 
+```cs
+// stack based VM
+var s_program = AssemblyBuilder.Parse<Stack<int>>("push 2 push 3 add push 0 store");
+
+// register based VM
+var r_program = AssemblyBuilder.Parse<Registers>("mov 0 2 mov 1 3 add 2 1 0 mov 0 0 store 0 2");
+```
+
+# Using Bytecode Builder : [In Progress]
+ 
