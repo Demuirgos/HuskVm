@@ -222,6 +222,60 @@ public static class Instructions {
         }
     }
 
+    [Metadata(3, 1, 1, 1, 1)]
+    public class Gt : Instruction<Registers>
+    {
+        public override byte OpCode { get; } = 0x0d;
+        public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
+        {
+            var state = vm.State;
+            var Registers = state.Holder;
+            var span = state.Program.AsSpan(state.ProgramCounter, 3);
+            int Register = span[0];
+            int value1 = Registers[span[1]];
+            int value2 = Registers[span[2]];
+            state.ProgramCounter += 3;
+            Registers[Register] = value1 > value2 ? 1 : 0;
+            return vm;
+        }
+    }
+
+    [Metadata(3, 1, 1, 1, 1)]
+    public class Eq : Instruction<Registers>
+    {
+        public override byte OpCode { get; } = 0x0e;
+        public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
+        {
+            var state = vm.State;
+            var Registers = state.Holder;
+            var span = state.Program.AsSpan(state.ProgramCounter, 3);
+            int Register = span[0];
+            int value1 = Registers[span[1]];
+            int value2 = Registers[span[2]];
+            state.ProgramCounter += 3;
+            Registers[Register] = value1 == value2 ? 1 : 0;
+            return vm;
+        }
+    }
+
+    [Metadata(3, 1, 1, 1, 1)]
+    public class Mod : Instruction<Registers>
+    {
+        public override byte OpCode { get; } = 0x0f;
+        public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
+        {
+            var state = vm.State;
+            var Registers = state.Holder;
+            var span = state.Program.AsSpan(state.ProgramCounter, 3);
+            int Register = span[0];
+            int value1 = Registers[span[1]];
+            int value2 = Registers[span[2]];
+            state.ProgramCounter += 3;
+            Registers[Register] = value1 % value2;
+            return vm;
+        }
+    }
+
     [Metadata(0, 0)]
     public class Halt : Instruction<Registers> {
         public override byte OpCode { get; } = 0xff;

@@ -39,5 +39,35 @@ namespace VirtualMachine.Builder
             }
             return bytes.ToArray();
         }
+    
+        public static string Disassemble(byte[] bytecode)
+        {
+            var Instructions = InstructionSet<T>.Opcodes;
+            var opcodes =  Instructions.ToDictionary(i => i.OpCode);
+            var disassembly = new List<string>();
+            for(int i = 0; i < bytecode.Length; )
+            {
+                var opcode = bytecode[i++];
+                if(opcodes.TryGetValue(opcode, out var instruction))
+                {
+                    var metadata = instruction.GetType().GetCustomAttributes(typeof(Instruction.MetadataAttribute), false).FirstOrDefault() as MetadataAttribute;
+                    var immediate = metadata.ImmediateSizes;
+                    var args = new List<string>();
+                    for(int j = 0; j < immediate.Length; j++)
+                    {   
+                        var size = immediate[j]; 
+                        if (size == 1) args.Add(bytecode[i].ToString());
+                        else if(size == 2) args.Add(BitConverter.ToInt16(bytecode, i).ToString());
+                        else if(size == 4) args.Add(BitConverter.ToInt32(bytecode, i).ToString());
+                        else if(size == 8) args.Add(BitConverter.ToInt64(bytecode, i).ToString());
+                        else throw new Exception("Invalid Immediate Size");
+                        i += size;
+
+                    }
+                    disassembly.Add($"{instruction.Name} {string.Join(" ", args)}");
+                }
+            }
+            return string.Join("\n", disassembly);
+        }
     }
 }

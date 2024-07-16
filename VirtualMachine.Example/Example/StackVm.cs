@@ -119,15 +119,6 @@ public static class Instructions {
         }
     }
 
-    [Metadata(0, 0)]
-    public class Halt : Instruction<Stack<int>> {
-        public override byte OpCode { get; } = 0xff;
-        public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
-            vm.State.ProgramCounter = vm.State.Program.Length;
-            return vm;
-        }
-    }
-
     [Metadata(1, 0)]
     public class Jump : Instruction<Stack<int>> {
         public override byte OpCode { get; } = 0x0c;
@@ -145,8 +136,10 @@ public static class Instructions {
         public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm) {
             var state = vm.State;
             var stack = state.Holder;
-            if (stack.Pop() == 0) {
-                state.ProgramCounter = stack.Pop();
+            var condition = stack.Pop() == 0;
+            var destination = stack.Pop();
+            if (condition) {
+                state.ProgramCounter = destination;
             }
             return vm;
         }
@@ -181,6 +174,56 @@ public static class Instructions {
             var state = vm.State;
             var stack = state.Holder;
             stack.Push(stack.Peek());
+            return vm;
+        }
+    }
+
+    [Metadata(2, 1)]
+    public class Gt : Instruction<Stack<int>>
+    {
+        public override byte OpCode { get; } = 0x11;
+        public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm)
+        {
+            var state = vm.State;
+            var stack = state.Holder;
+            stack.Push(stack.Pop() > stack.Pop() ? 1 : 0);
+            return vm;
+        }
+    }
+
+    [Metadata(2, 1)]
+    public class Eq : Instruction<Stack<int>>
+    {
+        public override byte OpCode { get; } = 0x12;
+        public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm)
+        {
+            var state = vm.State;
+            var stack = state.Holder;
+            stack.Push(stack.Pop() == stack.Pop() ? 1 : 0);
+            return vm;
+        }
+    }
+
+    [Metadata(2, 1)]
+    public class Mod : Instruction<Stack<int>>
+    {
+        public override byte OpCode { get; } = 0x13;
+        public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm)
+        {
+            var state = vm.State;
+            var stack = state.Holder;
+            stack.Push(stack.Pop() % stack.Pop());
+            return vm;
+        }
+    }
+
+    [Metadata(0, 0)]
+    public class Halt : Instruction<Stack<int>>
+    {
+        public override byte OpCode { get; } = 0xff;
+        public override IVirtualMachine<Stack<int>> Apply(IVirtualMachine<Stack<int>> vm)
+        {
+            vm.State.ProgramCounter = vm.State.Program.Length;
             return vm;
         }
     }
