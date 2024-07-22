@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VirtualMachine", "VirtualMa
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VirtualMachine.Generator", "VirtualMachine.Generator\VirtualMachine.Generator.csproj", "{C33406B3-C8C5-4A20-A82C-C48151EEB4A6}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VirtualMachine.iLang", "VirtualMachine.iLang\VirtualMachine.iLang.csproj", "{D81FB305-440B-4A41-9486-C5C4265ECFC6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,8 +29,15 @@ Global
 		{C33406B3-C8C5-4A20-A82C-C48151EEB4A6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C33406B3-C8C5-4A20-A82C-C48151EEB4A6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C33406B3-C8C5-4A20-A82C-C48151EEB4A6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D81FB305-440B-4A41-9486-C5C4265ECFC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D81FB305-440B-4A41-9486-C5C4265ECFC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D81FB305-440B-4A41-9486-C5C4265ECFC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D81FB305-440B-4A41-9486-C5C4265ECFC6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {85789EE0-04FE-432D-ACE4-46B5B6850110}
 	EndGlobalSection
 EndGlobal

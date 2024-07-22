@@ -160,7 +160,7 @@ public static class Instructions {
     }
 
     [Metadata(2, 0, 1, 1)]
-    public class JumpIfZero : Instruction<Registers> {
+    public class CJump : Instruction<Registers> {
         public override byte OpCode { get; } = 0x07;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
@@ -168,7 +168,7 @@ public static class Instructions {
             var span = state.Program.AsSpan(state.ProgramCounter, 2);
             int condition = span[0];
             int value = span[1];
-            if(Registers[condition] == 0) {
+            if(Registers[condition] != 0) {
                 state.ProgramCounter = Registers[value];
             } else {
                 state.ProgramCounter += 2;
@@ -177,32 +177,60 @@ public static class Instructions {
         }
     }
 
-    [Metadata(2, 1, 1, 1)]
+    [Metadata(2, 1, 1, 1, 1)]
     public class Load : Instruction<Registers> {
         public override byte OpCode { get; } = 0x0a;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
-            var span = state.Program.AsSpan(state.ProgramCounter, 2);
+            var span = state.Program.AsSpan(state.ProgramCounter, 3);
             int Register = span[0];
             int addressReg = span[1];
-            state.ProgramCounter += 2;
-            Registers[Register] = state.Memory[Registers[addressReg]];
+            int isGlobalReg = span[2];
+            state.ProgramCounter += 3;
+
+            Range stackFrame = 0..512;
+            Range globalFrame = 0..512;
+            int frameSize = 16;
+
+            if (Registers[isGlobalReg] != 0)
+            {
+                Registers[Register] = state.Memory[globalFrame.Start.Value + Registers[addressReg]];
+            } else
+            {
+                int offset = Registers[addressReg] + (state.Holder.Calls.Count - 1) * frameSize;
+                Registers[Register] = state.Memory[offset];
+            }
             return vm;
         }
     }
 
-    [Metadata(2, 0, 1, 1)]
+    [Metadata(2, 0, 1, 1, 1)]
     public class Store : Instruction<Registers> {
         public override byte OpCode { get; } = 0x0b;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
-            var span = state.Program.AsSpan(state.ProgramCounter, 2);
+            var span = state.Program.AsSpan(state.ProgramCounter, 3);
             int addressReg = span[0];
             int Register = span[1];
-            state.ProgramCounter += 2;
-            state.Memory[Registers[addressReg]] = Registers[Register];
+            int isGlobalReg = span[2];
+
+
+            Range stackFrame = 0..512;
+            Range globalFrame = 0..512;
+            int frameSize = 16;
+
+            if (Registers[isGlobalReg] != 0)
+            {
+                state.Memory[globalFrame.Start.Value + Registers[addressReg]] = Registers[Register];
+            } else
+            {
+                int offset = Registers[addressReg] + (state.Holder.Calls.Count - 1) * frameSize;
+                state.Memory[offset] = Registers[Register];
+            }
+
+            state.ProgramCounter += 3;
             return vm;
         }
     }
@@ -236,6 +264,24 @@ public static class Instructions {
             int value2 = Registers[span[2]];
             state.ProgramCounter += 3;
             Registers[Register] = value1 > value2 ? 1 : 0;
+            return vm;
+        }
+    }
+
+    [Metadata(3, 1, 1, 1, 1)]
+    public class Lt : Instruction<Registers>
+    {
+        public override byte OpCode { get; } = 0x12;
+        public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
+        {
+            var state = vm.State;
+            var Registers = state.Holder;
+            var span = state.Program.AsSpan(state.ProgramCounter, 3);
+            int Register = span[0];
+            int value1 = Registers[span[1]];
+            int value2 = Registers[span[2]];
+            state.ProgramCounter += 3;
+            Registers[Register] = value1 < value2 ? 1 : 0;
             return vm;
         }
     }
@@ -276,6 +322,36 @@ public static class Instructions {
         }
     }
 
+    [Metadata(0, 0, 1)]
+    public class Call : Instruction<Registers>
+    {
+        public override byte OpCode { get; } = 0x10;
+        public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
+        {
+            var state = vm.State;
+            var Registers = state.Holder;
+            var span = state.Program.AsSpan(state.ProgramCounter, 1);
+            int address = span[0];
+            state.ProgramCounter += 1;
+            Registers.Calls.Push(state.ProgramCounter);
+            state.ProgramCounter = Registers[address];
+            return vm;
+        }
+    }
+
+    [Metadata(0, 0)]
+    public class Ret : Instruction<Registers>
+    {
+        public override byte OpCode { get; } = 0x11;
+        public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
+        {
+            var state = vm.State;
+            var Registers = state.Holder;
+            state.ProgramCounter = Registers.Calls.Pop();
+            return vm;
+        }
+    }
+
     [Metadata(0, 0)]
     public class Halt : Instruction<Registers> {
         public override byte OpCode { get; } = 0xff;
@@ -288,6 +364,7 @@ public static class Instructions {
 
 public record Registers(int Count) {
     public int[] Items { get; set; } = new int[Count];
+    public Stack<int> Calls { get; set; } = new Stack<int>();
     public int this[int index] {
         get => Items[index];
         set => Items[index] = value;
@@ -301,7 +378,7 @@ public record Registers(int Count) {
 public record RegistersState() : IState<Registers> {
     public Registers Holder { get; set; } = new(8);
     public int ProgramCounter { get; set; } = 0;
-    public int[] Memory { get; set; } = new int[16];
+    public int[] Memory { get; set; } = new int[1024];
     public byte[] Program { get; set; }
 
     public override string ToString() {

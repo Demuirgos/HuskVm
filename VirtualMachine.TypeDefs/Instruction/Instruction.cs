@@ -5,7 +5,7 @@ using VirtualMachine.Processor;
 
 namespace VirtualMachine.Instruction
 {
-    public abstract class Instruction<T>
+    public abstract class Instruction<T> 
     {
         public string Name => GetType().Name;
         public abstract byte OpCode { get; }
@@ -17,7 +17,7 @@ namespace VirtualMachine.Instruction
         public static Instruction.Instruction<T>[] Opcodes {
             get {
                 // get current assembly types not executing assembly
-                var types = Assembly.GetEntryAssembly()?.GetTypes()
+                var types = Assembly.GetAssembly(typeof(T))?.GetTypes()
                     .Where(t => t.BaseType?.IsGenericType == true && t.BaseType.GetGenericTypeDefinition() == typeof(Instruction.Instruction<>))
                     .Where(t => t.BaseType.GetGenericArguments()[0] == typeof(T))
                     .ToList();

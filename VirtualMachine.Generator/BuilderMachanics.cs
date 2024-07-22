@@ -1,43 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-namespace VirtualMachine.Generator {
-    [Generator]
-    public class BytecodeBuilderGenerator : ISourceGenerator
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Linq;
+
+namespace VirtualMachine.Generator
+{
+    internal class BuilderMachanics
     {
-        private IEnumerable<ClassDeclarationSyntax> GetAllMarkedClasses(Compilation context, string attributeName)
-            => context.SyntaxTrees
-                .SelectMany(st => st.GetRoot()
-                .DescendantNodes()
-                .OfType<ClassDeclarationSyntax>()
-                .Where(c => GetMark(c, attributeName) is not null))
-                .Where(c => c.BaseList?.Types.Any(t => t.ToString().StartsWith("Instruction")) ?? false);
-        private AttributeSyntax GetMark(ClassDeclarationSyntax classDeclaration, string attributeName)
-        => classDeclaration.AttributeLists
-            .SelectMany(al => al.Attributes)
-            .Where(a => a.Name.GetText().ToString().StartsWith(attributeName.Replace("Attribute", String.Empty)))
-            .FirstOrDefault();
-
-        public static string GetNamespace(SyntaxNode node)
+        public static void EmitCode(GeneratorExecutionContext context)
         {
-            if (node.Parent is FileScopedNamespaceDeclarationSyntax or NamespaceDeclarationSyntax)
-                return node.Parent switch
-                {
-                    FileScopedNamespaceDeclarationSyntax f => f.Name.ToString(),
-                    NamespaceDeclarationSyntax n => n.Name.ToString(),
-                    _ => throw new NotImplementedException(),
-                };
-
-            else
-                return node.Parent is not null ? GetNamespace(node.Parent) : String.Empty;
-        }
-
-        public void Execute(GeneratorExecutionContext context)
-        {
-            var types = GetAllMarkedClasses(context.Compilation, "Metadata");
+            var types = Utils.GetAllMarkedClasses(context.Compilation, "Metadata");
 
             var roots = context.Compilation.SyntaxTrees
                 .Select(st => st.GetRoot())
@@ -79,7 +53,7 @@ namespace VirtualMachine.Generator {
             builder.Append("public static class BytecodeBuilderExt {\n");
             foreach (var type in types)
             {
-                string baseClassToken = 
+                string baseClassToken =
                     type.BaseList.Types
                         .First(t => t.ToString().StartsWith("Instruction"))
                         .ToString();
@@ -87,7 +61,7 @@ namespace VirtualMachine.Generator {
                 string baseClass = baseClassToken.Substring(baseClassToken.IndexOf("<") + 1, baseClassToken.LastIndexOf(">") - baseClassToken.IndexOf("<") - 1);
 
                 var name = type.Identifier.Text;
-                var metadata = GetMark(type, "Metadata");
+                var metadata = Utils.GetMark(type, "Metadata");
                 var arguments = metadata.ArgumentList.Arguments.Select(a => a.ToString());
                 var immediateSizes = arguments.Skip(2).Select(a => byte.Parse(a)).ToArray();
 
@@ -111,10 +85,10 @@ namespace VirtualMachine.Generator {
                 builder.Append($@"
     current.Bytecode.Add({opcode});
     {string.Join("\n", immediateSizes.Select((size, i) =>
-    {
-        if(size == 1) return $"current.Bytecode.Add(immediate{i});";
-        else return $"current.Bytecode.AddRange(BitConverter.GetBytes(immediate{i}));";
-    }))}
+                {
+                    if (size == 1) return $"current.Bytecode.Add(immediate{i});";
+                    else return $"current.Bytecode.AddRange(BitConverter.GetBytes(immediate{i}));";
+                }))}
     return current;
 ");
 
@@ -123,11 +97,6 @@ namespace VirtualMachine.Generator {
             builder.Append("}\n");
             builder.Append("}\n");
             context.AddSource("BytecodeBuilder.g.cs", builder.ToString());
-        }
-
-        public void Initialize(GeneratorInitializationContext context)
-        {
-            // No initialization required for this one
         }
     }
 }

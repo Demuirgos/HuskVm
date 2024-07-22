@@ -45,6 +45,7 @@ namespace VirtualMachine.Builder
             var Instructions = InstructionSet<T>.Opcodes;
             var opcodes =  Instructions.ToDictionary(i => i.OpCode);
             var disassembly = new List<string>();
+            int index = 0;
             for(int i = 0; i < bytecode.Length; )
             {
                 var opcode = bytecode[i++];
@@ -64,7 +65,8 @@ namespace VirtualMachine.Builder
                         i += size;
 
                     }
-                    disassembly.Add($"{instruction.Name} {string.Join(" ", args)}");
+                    disassembly.Add($"{index}: {instruction.Name} {string.Join(" ", args)}");
+                    index += immediate.Sum() + 1;
                 }
             }
             return string.Join("\n", disassembly);
