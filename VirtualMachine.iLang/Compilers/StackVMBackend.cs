@@ -1,70 +1,16 @@
 ﻿using iLang.SyntaxDefinitions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using VirtualMachine.Example.Stack;
-using VirtualMachine.Instruction;
 using Boolean = iLang.SyntaxDefinitions.Boolean;
 using static VirtualMachine.Instructions.InstructionsExt.StacksExt;
-namespace iLang.Compilers
+using VirtualMachine.iLang.Compilers;
+namespace iLang.Compilers.StacksCompiler
 {
-
-    public static class Compilers
+    public static class Compiler
     {
-        class Opcode(Instruction<Stacks> instruction, Operand Operand)
+        private class FunctionContext() : Context<Stacks>(String.Empty)
         {
-            public override string ToString() => $"{instruction.Name} {Operand}";
-
-            public Instruction<Stacks> Op { get; } = instruction;
-            public Operand Operand { get; set; } = Operand;
-        }
-        record Operand;
-        record Value(Number operand) : Operand
-        {
-            public override string ToString() => operand.Value.ToString();
-        }
-
-        record None : Operand
-        {
-            public override string ToString() => "";
-        }
-        record Placeholder(string atom) : Operand
-        {
-            public override string ToString() => atom;
-        }
-        record Bytecode(List<Opcode> Instruction)
-        {
-            public void Add(Instruction<Stacks> instruction) => Instruction.Add(new Opcode(instruction, new None()));
-            public void Add(Instruction<Stacks> instruction, Number operand) => Instruction.Add(new Opcode(instruction, new Value(operand)));
-            public void Add(Instruction<Stacks> instruction, Operand operand) => Instruction.Add(new Opcode(instruction, operand));
-
-            public void AddRange(Bytecode bytecode) => Instruction.AddRange(bytecode.Instruction);
-
-            public void RemoveRange(int start, int count) => Instruction.RemoveRange(start, count);
-            public void RemoveRange(int start) => Instruction.RemoveRange(start, Instruction.Count - start);
-
-            public int Size => Instruction.Sum(x => {
-                if (x.Operand is Value) return 1 + 4;
-                else if (x.Operand is Placeholder) return 1 + 4;
-                return 1;
-            });
-
-            public override string ToString() => string.Join("\n", Instruction.Select((x, i) => $"{new Bytecode(Instruction.Slice(0, i)).Size} : {x.ToString()}"));
-        }
-
-        private class Context(string name)
-        {
-            public string Name { get; set; } = name;
-            public Bytecode Bytecode { get; } = new(new List<Opcode>());
-            public Dictionary<string, int> Variables { get; } = new();
-        }
-
-        private class FunctionContext() : Context(String.Empty)
-        {
-            public Dictionary<string, Bytecode> Functions { get; } = new();
-            public Bytecode MachineCode { get; } = new(new List<Opcode>());
+            public Dictionary<string, Bytecode<Stacks>> Functions { get; } = new();
+            public Bytecode<Stacks> MachineCode { get; } = new(new List<Opcode<Stacks>>());
 
             public byte[] Collapse()
             {
@@ -74,24 +20,24 @@ namespace iLang.Compilers
                 Dictionary<string, int> functionOffsets = new();
                 int offsetRegionSet = Functions.Count * 16 + 6;
 
-                MachineCode.Add(Push, new Value(new Number(offsetRegionSet)));
-                MachineCode.Add(Push, new Value(new Number(Address("Main"))));
-                MachineCode.Add(Push, new Value(new Number(1)));
+                MachineCode.Add(Push, offsetRegionSet);
+                MachineCode.Add(Push, Address("Main"));
+                MachineCode.Add(Push, 1);
                 MachineCode.Add(Store);
 
                 int acc = Functions["Main"].Size + offsetRegionSet;
                 foreach (var function in Functions)
                 {
                     if (function.Key == "Main") continue;
-                    MachineCode.Add(Push, new Value(new Number(acc)));
-                    MachineCode.Add(Push, new Value(new Number(Address(function.Key))));
-                    MachineCode.Add(Push, new Value(new Number(1)));
+                    MachineCode.Add(Push, acc);
+                    MachineCode.Add(Push, Address(function.Key));
+                    MachineCode.Add(Push, 1);
                     MachineCode.Add(Store);
 
                     acc += function.Value.Size;
                 }
 
-                MachineCode.Add(Push, new Placeholder("Main"));
+                MachineCode.Add(Push, "Main");
                 MachineCode.Add(Call);
 
                 functionOffsets["Main"] = offsetRegionSet;
@@ -106,32 +52,32 @@ namespace iLang.Compilers
 
                 foreach (var instruction in MachineCode.Instruction)
                 {
-                    if (instruction.Operand is Placeholder placeholder)
+                    if (instruction.Op == Push && instruction.Operands[0] is Placeholder placeholder)
                     {
                         if (!functionOffsets.ContainsKey(placeholder.atom))
                         {
                             throw new Exception($"Function {placeholder.atom} not found");
                         }
-                        instruction.Operand = new Value(new Number(functionOffsets[placeholder.atom]));
+                        instruction.Operands[0] = functionOffsets[placeholder.atom];
                     }
                 }
 
                 return MachineCode.Instruction.SelectMany(x => {
-                    if (x.Operand is Value value)
+                    if (x.Operands.Length > 0 && (x.Operands[0] is Value value))
                     {
-                        return [x.Op.OpCode, .. BitConverter.GetBytes((int)value.operand.Value)];
+                        return [x.Op.OpCode, .. BitConverter.GetBytes(value.Number)];
                     }
                     return new byte[] { x.Op.OpCode };
                 }).ToArray();
             }
         }
 
-        private static void CompileIdentifier(Identifier identifier, Context context, FunctionContext functionContext)
+        private static void CompileIdentifier(Identifier identifier, Context<Stacks> context, FunctionContext functionContext)
         {
             if (context.Variables.ContainsKey(identifier.Value))
             {
-                context.Bytecode.Add(Push, new Value(new Number(context.Variables[identifier.Value])));
-                context.Bytecode.Add(Push, new Value(new Number(0)));
+                context.Bytecode.Add(Push, context.Variables[identifier.Value]);
+                context.Bytecode.Add(Push, 0);
                 context.Bytecode.Add(Load);
 
             }
@@ -141,31 +87,31 @@ namespace iLang.Compilers
             }
         }
 
-        private static void CompileBoolean(Boolean boolean, Context context, FunctionContext functionContext)
+        private static void CompileBoolean(Boolean boolean, Context<Stacks> context, FunctionContext functionContext)
         {
-            context.Bytecode.Add(Push, boolean.Value ? new Number(1) : new Number(0));
+            context.Bytecode.Add(Push, boolean.Value ? 1 : 0);
         }
 
-        private static void CompileNumber(Number number, Context context, FunctionContext _)
+        private static void CompileNumber(Number number, Context<Stacks> context, FunctionContext _)
         {
-            context.Bytecode.Add(Push, number);
+            context.Bytecode.Add(Push, (int)number.Value);
         }
 
-        private static void CompileCall(CallExpr call, Context context, FunctionContext functionContext)
+        private static void CompileCall(CallExpr call, Context<Stacks> context, FunctionContext functionContext)
         {
             foreach (var arg in call.Args.Items)
             {
                 CompileExpression(arg, context, functionContext);
             }
-            context.Bytecode.Add(Push, new Placeholder(((Identifier)call.Function).Value));
+            context.Bytecode.Add(Push, ((Identifier)call.Function).Value);
             context.Bytecode.Add(Call);
         }
 
-        private static void CompileBinaryOp(BinaryOp binaryOp, Context context, FunctionContext functionContext)
+        private static void CompileBinaryOp(BinaryOp binaryOp, Context<Stacks> context, FunctionContext functionContext)
         {
             CompileExpression(binaryOp.Right, context, functionContext);
             CompileExpression(binaryOp.Left, context, functionContext);
-            switch (binaryOp.Op.op)
+            switch (binaryOp.Op.Value)
             {
                 case '+':
                     context.Bytecode.Add(Add);
@@ -202,35 +148,35 @@ namespace iLang.Compilers
                     context.Bytecode.Add(Xor);
                     break;
                 default:
-                    throw new Exception($"Unknown binary operator {binaryOp.Op.op}");
+                    throw new Exception($"Unknown binary operator {binaryOp.Op.Value}");
             }
         }
 
-        private static void CompileUnaryOp(UnaryOp unaryOp, Context context, FunctionContext functionContext)
+        private static void CompileUnaryOp(UnaryOp unaryOp, Context<Stacks> context, FunctionContext functionContext)
         {
             CompileExpression(unaryOp.Right, context, functionContext);
-            switch (unaryOp.Op.op)
+            switch (unaryOp.Op.Value)
             {
                 case '+':
                     break;
                 case '-':
-                    context.Bytecode.Add(Push, new Value(new Number(-1)));
+                    context.Bytecode.Add(Push, -1);
                     context.Bytecode.Add(Mul);
                     break;
                 case '!':
                     context.Bytecode.Add(Not);
                     break;
                 default:
-                    throw new Exception($"Unknown unary operator {unaryOp.Op.op}");
+                    throw new Exception($"Unknown unary operator {unaryOp.Op.Value}");
             }
         }
 
-        private static void CompileParenthesis(ParenthesisExpr parenthesis, Context context, FunctionContext functionContext)
+        private static void CompileParenthesis(ParenthesisExpr parenthesis, Context<Stacks> context, FunctionContext functionContext)
         {
             CompileExpression(parenthesis.Body, context, functionContext);
         }
 
-        private static void CompileExpression(Expression expression, Context context, FunctionContext functionContext)
+        private static void CompileExpression(Expression expression, Context<Stacks> context, FunctionContext functionContext)
         {
             switch (expression)
             {
@@ -254,7 +200,7 @@ namespace iLang.Compilers
             }
         }
 
-        private static void CompileStatement(Statement statement, Context context, FunctionContext functionContext)
+        private static void CompileStatement(Statement statement, Context<Stacks> context, FunctionContext functionContext)
         {
             switch (statement)
             {
@@ -278,7 +224,7 @@ namespace iLang.Compilers
             }
         }
 
-        private static void CompileLoop(WhileStatement loop, Context context, FunctionContext functionContext)
+        private static void CompileLoop(WhileStatement loop, Context<Stacks> context, FunctionContext functionContext)
         {
             int AbsoluteValue(int value) => value < 0 ? -value : value;
             int Address(string name) => AbsoluteValue(name.GetHashCode() % 1024);
@@ -288,43 +234,43 @@ namespace iLang.Compilers
 
             CompileBlock(loop.Body, context, functionContext);
 
-            var bodySlice = new Bytecode(context.Bytecode.Instruction[current..]);
+            var bodySlice = new Bytecode<Stacks>(context.Bytecode.Instruction[current..]);
             context.Bytecode.RemoveRange(current);
 
             CompileExpression(loop.Condition, context, functionContext);
-            context.Bytecode.Add(Push, new Value(new Number(14)));
-            context.Bytecode.Add(Push, new Value(new Number(0)));
+            context.Bytecode.Add(Push, 14);
+            context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Store);
 
             int offsetIndex = Address(context.Name);
 
-            context.Bytecode.Add(Push, new Value(new Number(offsetIndex)));
-            context.Bytecode.Add(Push, new Value(new Number(1)));
+            context.Bytecode.Add(Push, offsetIndex);
+            context.Bytecode.Add(Push, 1);
             context.Bytecode.Add(Load);
-            context.Bytecode.Add(Push, new Value(new Number(context.Bytecode.Size + bodySlice.Size + 42)));
+            context.Bytecode.Add(Push, context.Bytecode.Size + bodySlice.Size + 42);
             context.Bytecode.Add(Add);
 
-            context.Bytecode.Add(Push, new Value(new Number(14)));
-            context.Bytecode.Add(Push, new Value(new Number(0)));
+            context.Bytecode.Add(Push, 14);
+            context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Load);
 
-            context.Bytecode.Add(Push, new Value(new Number(0)));
+            context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Eq);
 
             context.Bytecode.Add(CJump);
 
             context.Bytecode.AddRange(bodySlice);
 
-            context.Bytecode.Add(Push, new Value(new Number(offsetIndex)));
-            context.Bytecode.Add(Push, new Value(new Number(1)));
+            context.Bytecode.Add(Push, offsetIndex);
+            context.Bytecode.Add(Push, 1);
             context.Bytecode.Add(Load);
-            context.Bytecode.Add(Push, new Value(new Number(currentSize)));
+            context.Bytecode.Add(Push, currentSize);
             context.Bytecode.Add(Add);
 
             context.Bytecode.Add(Jump);
         }
 
-        private static void CompileBlock(Block block, Context context, FunctionContext functionContext)
+        private static void CompileBlock(Block block, Context<Stacks> context, FunctionContext functionContext)
         {
             foreach (var statement in block.Items)
             {
@@ -332,13 +278,13 @@ namespace iLang.Compilers
             }
         }
 
-        private static void CompileReturn(ReturnStatement returnStatement, Context context, FunctionContext functionContext)
+        private static void CompileReturn(ReturnStatement returnStatement, Context<Stacks> context, FunctionContext functionContext)
         {
             CompileExpression(returnStatement.Value, context, functionContext);
             context.Bytecode.Add(Ret);
         }
 
-        private static void CompileVarDeclaration(VarDeclaration varDeclaration, Context context, FunctionContext functionContext)
+        private static void CompileVarDeclaration(VarDeclaration varDeclaration, Context<Stacks> context, FunctionContext functionContext)
         {
             if (context.Variables.ContainsKey(varDeclaration.Name.Value))
             {
@@ -348,12 +294,12 @@ namespace iLang.Compilers
             context.Variables[varDeclaration.Name.Value] = context.Variables.Count;
 
             CompileExpression(varDeclaration.Value, context, functionContext);
-            context.Bytecode.Add(Push, new Value(new Number(context.Variables[varDeclaration.Name.Value])));
-            context.Bytecode.Add(Push, new Value(new Number(0)));
+            context.Bytecode.Add(Push, context.Variables[varDeclaration.Name.Value]);
+            context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Store);
         }
 
-        private static void CompileAssignment(Assignment assignment, Context context, FunctionContext functionContext)
+        private static void CompileAssignment(Assignment assignment, Context<Stacks> context, FunctionContext functionContext)
         {
             if (!context.Variables.ContainsKey(assignment.Name.Value))
             {
@@ -361,20 +307,16 @@ namespace iLang.Compilers
             }
 
             CompileExpression(assignment.Value, context, functionContext);
-            context.Bytecode.Add(Push, new Value(new Number(context.Variables[assignment.Name.Value])));
-            context.Bytecode.Add(Push, new Value(new Number(0)));
+            context.Bytecode.Add(Push, context.Variables[assignment.Name.Value]);
+            context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Store);
         }
 
-        private static void CompileAtom(Atom tree, Context context, FunctionContext functionContext)
+        private static void CompileAtom(Atom tree, Context<Stacks> context, FunctionContext functionContext)
         {
             switch (tree)
             {
                 case Identifier identifier:
-                    if (!context.Variables.ContainsKey(identifier.Value))
-                    {
-                        context.Variables[identifier.Value] = context.Variables.Count;
-                    }
                     CompileIdentifier(identifier, context, functionContext);
                     break;
                 case Number number:
@@ -388,46 +330,46 @@ namespace iLang.Compilers
             }
         }
 
-        private static void CompileConditional(IfStatement conditional, Context context, FunctionContext functionContext)
+        private static void CompileConditional(IfStatement conditional, Context<Stacks> context, FunctionContext functionContext)
         {
             int AbsoluteValue(int value) => value < 0 ? -value : value;
             int Address(string name) => AbsoluteValue(name.GetHashCode() % 1024);
 
             CompileExpression(conditional.Condition, context, functionContext);
-            context.Bytecode.Add(Push, new Value(new Number(14)));
-            context.Bytecode.Add(Push, new Value(new Number(0)));
+            context.Bytecode.Add(Push, 14);
+            context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Store);
 
             int current = context.Bytecode.Instruction.Count;
 
             CompileBlock(conditional.True, context, functionContext);
-            var trueSlice = new Bytecode(context.Bytecode.Instruction[current..]);
+            var trueSlice = new Bytecode<Stacks>(context.Bytecode.Instruction[current..]);
             context.Bytecode.RemoveRange(current);
 
             CompileBlock(conditional.False, context, functionContext);
-            var falseSlice = new Bytecode(context.Bytecode.Instruction[current..]);
+            var falseSlice = new Bytecode<Stacks>(context.Bytecode.Instruction[current..]);
             context.Bytecode.RemoveRange(current);
 
             int offsetIndex = Address(context.Name);
 
-            context.Bytecode.Add(Push, new Value(new Number(offsetIndex)));
-            context.Bytecode.Add(Push, new Value(new Number(1)));
+            context.Bytecode.Add(Push, offsetIndex);
+            context.Bytecode.Add(Push, 1);
             context.Bytecode.Add(Load);
-            context.Bytecode.Add(Push, new Value(new Number(context.Bytecode.Size + falseSlice.Size + 36)));
+            context.Bytecode.Add(Push, context.Bytecode.Size + falseSlice.Size + 36);
             context.Bytecode.Add(Add);
 
-            context.Bytecode.Add(Push, new Value(new Number(14)));
-            context.Bytecode.Add(Push, new Value(new Number(0)));
+            context.Bytecode.Add(Push, 14);
+            context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Load);
 
             context.Bytecode.Add(CJump);
 
             context.Bytecode.AddRange(falseSlice);
 
-            context.Bytecode.Add(Push, new Value(new Number(offsetIndex)));
-            context.Bytecode.Add(Push, new Value(new Number(1)));
+            context.Bytecode.Add(Push, offsetIndex);
+            context.Bytecode.Add(Push, 1);
             context.Bytecode.Add(Load);
-            context.Bytecode.Add(Push, new Value(new Number(context.Bytecode.Size + trueSlice.Size + 7)));
+            context.Bytecode.Add(Push, context.Bytecode.Size + trueSlice.Size + 7);
             context.Bytecode.Add(Add);
             context.Bytecode.Add(Jump);
 
@@ -441,14 +383,14 @@ namespace iLang.Compilers
                 throw new Exception($"Function {function.Name.Value} already defined");
             }
 
-            var localContext = new Context(function.Name.Value);
+            var localContext = new Context<Stacks>(function.Name.Value);
 
             var functionArgs = function.Args.Items.Reverse().ToArray();
             for (int i = 0; i < functionArgs.Length; i++)
             {
                 localContext.Variables[functionArgs[i].Value] = i;
-                localContext.Bytecode.Add(Push, new Value(new Number(i)));
-                localContext.Bytecode.Add(Push, new Value(new Number(0)));
+                localContext.Bytecode.Add(Push, i);
+                localContext.Bytecode.Add(Push, 0);
                 localContext.Bytecode.Add(Store);
             }
 

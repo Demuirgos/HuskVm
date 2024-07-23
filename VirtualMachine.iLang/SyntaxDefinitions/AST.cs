@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VirtualMachine.iLang.Compilers;
 
 namespace iLang.SyntaxDefinitions
 {
@@ -14,7 +15,7 @@ namespace iLang.SyntaxDefinitions
     public record Identifier(string Value) : Atom;
     public record Number(double Value) : Atom;
     public record Boolean(bool Value) : Atom;
-    public record Operation(char op);
+    public record Operation(char Value);
     public record ArgumentList(Identifier[] Items) : SyntaxTree
     {
         public override string ToString() => $"[{string.Join(", ", Items.Select(x => x.ToString()))}]";

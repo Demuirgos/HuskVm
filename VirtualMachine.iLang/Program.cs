@@ -2,6 +2,7 @@
 using iLang.Parsers;
 using System;
 using VirtualMachine.Builder;
+using VirtualMachine.Example.Register;
 using VirtualMachine.Example.Stack;
 using VirtualMachine.Processor;
 
@@ -23,12 +24,12 @@ SumRangeRec : [a, b] => {
     }
 }; 
 
-Main: SumRangeLoop(0, 11);
+Main: SumRangeRec(0, 11);
 ";
 
 Parsers.ParseCompilationUnit(code, out var function);
-byte[] program = Compilers.Compile(function);
-IVirtualMachine<Stacks> vm = new VirtualMachine.Example.Stack.VirtualMachine();
-Console.WriteLine(AssemblyBuilder<Stacks>.Disassemble(program));
+byte[] program = iLang.Compilers.RegisterTarget.Compiler.Compile(function);
+IVirtualMachine<Registers> vm = new VirtualMachine.Example.Register.VirtualMachine();
+Console.WriteLine(AssemblyBuilder<Registers>.Disassemble(program));
 vm.LoadProgram(program);
 Console.WriteLine(vm.Run());

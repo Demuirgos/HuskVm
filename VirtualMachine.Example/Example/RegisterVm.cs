@@ -148,7 +148,7 @@ public static class Instructions {
 
     [Metadata(1, 0, 1)]
     public class Jump : Instruction<Registers> {
-        public override byte OpCode { get; } = 0x06;
+        public override byte OpCode { get; } = 0x0a;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
@@ -161,7 +161,7 @@ public static class Instructions {
 
     [Metadata(2, 0, 1, 1)]
     public class CJump : Instruction<Registers> {
-        public override byte OpCode { get; } = 0x07;
+        public override byte OpCode { get; } = 0x0b;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
@@ -179,7 +179,7 @@ public static class Instructions {
 
     [Metadata(2, 1, 1, 1, 1)]
     public class Load : Instruction<Registers> {
-        public override byte OpCode { get; } = 0x0a;
+        public override byte OpCode { get; } = 0x0c;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
@@ -207,13 +207,13 @@ public static class Instructions {
 
     [Metadata(2, 0, 1, 1, 1)]
     public class Store : Instruction<Registers> {
-        public override byte OpCode { get; } = 0x0b;
+        public override byte OpCode { get; } = 0x0d;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
             var span = state.Program.AsSpan(state.ProgramCounter, 3);
-            int addressReg = span[0];
-            int Register = span[1];
+            int Register = span[0];
+            int addressReg = span[1];
             int isGlobalReg = span[2];
 
 
@@ -237,13 +237,13 @@ public static class Instructions {
 
     [Metadata(2, 1, 1, 1)]
     public class Dup : Instruction<Registers> {
-        public override byte OpCode { get; } = 0x0c;
+        public override byte OpCode { get; } = 0x0f;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
             var span = state.Program.AsSpan(state.ProgramCounter, 2);
-            int src = span[0];
-            int dest = span[1];
+            int src = span[1];
+            int dest = span[0];
             state.ProgramCounter += 2;  
             Registers[dest] = Registers[src];
             return vm;
@@ -253,7 +253,7 @@ public static class Instructions {
     [Metadata(3, 1, 1, 1, 1)]
     public class Gt : Instruction<Registers>
     {
-        public override byte OpCode { get; } = 0x0d;
+        public override byte OpCode { get; } = 0x10;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
         {
             var state = vm.State;
@@ -271,7 +271,7 @@ public static class Instructions {
     [Metadata(3, 1, 1, 1, 1)]
     public class Lt : Instruction<Registers>
     {
-        public override byte OpCode { get; } = 0x12;
+        public override byte OpCode { get; } = 0x11;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
         {
             var state = vm.State;
@@ -289,7 +289,7 @@ public static class Instructions {
     [Metadata(3, 1, 1, 1, 1)]
     public class Eq : Instruction<Registers>
     {
-        public override byte OpCode { get; } = 0x0e;
+        public override byte OpCode { get; } = 0x12;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
         {
             var state = vm.State;
@@ -307,7 +307,7 @@ public static class Instructions {
     [Metadata(3, 1, 1, 1, 1)]
     public class Mod : Instruction<Registers>
     {
-        public override byte OpCode { get; } = 0x0f;
+        public override byte OpCode { get; } = 0x13;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
         {
             var state = vm.State;
@@ -325,16 +325,15 @@ public static class Instructions {
     [Metadata(0, 0, 1)]
     public class Call : Instruction<Registers>
     {
-        public override byte OpCode { get; } = 0x10;
+        public override byte OpCode { get; } = 0x14;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
         {
             var state = vm.State;
             var Registers = state.Holder;
             var span = state.Program.AsSpan(state.ProgramCounter, 1);
-            int address = span[0];
-            state.ProgramCounter += 1;
-            Registers.Calls.Push(state.ProgramCounter);
-            state.ProgramCounter = Registers[address];
+            int addressReg = span[0];
+            Registers.Calls.Push(state.ProgramCounter + 1);
+            state.ProgramCounter = Registers[addressReg];
             return vm;
         }
     }
@@ -342,7 +341,7 @@ public static class Instructions {
     [Metadata(0, 0)]
     public class Ret : Instruction<Registers>
     {
-        public override byte OpCode { get; } = 0x11;
+        public override byte OpCode { get; } = 0x15;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
         {
             var state = vm.State;
@@ -382,7 +381,7 @@ public record RegistersState() : IState<Registers> {
     public byte[] Program { get; set; }
 
     public override string ToString() {
-        return $"ProgramCounter: {ProgramCounter}, Registers: {Holder}, Memory: [{string.Join(", ", Memory)}]";
+        return $"ProgramCounter: {ProgramCounter}, Registers: {Holder}, Memory: [{string.Join(", ", Memory[0..32])}]";
     }
 }
 
