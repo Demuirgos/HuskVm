@@ -141,5 +141,19 @@ var rb_program = new AssemblyBuilder<Registers>()
     .Mov(0, 0)
     .Store(0, 2);
 ```
+# Example Language iLang :
+```hs
+SumRangeRec : [a, b] => {
+    if (a = b) then {
+        return 0;
+    } else {
+        return a + SumRangeRec(a + 1, b);
+    }
+}; 
 
- 
+Main: SumRangeRec(0, 11);
+```
+## targeting stack vm:
+``byte[] program = iLang.Compilers.StacksCompiler.Compiler.Compile(function);``
+ ## targeting register vm:
+``byte[] program = iLang.Compilers.RegisterTarget.Compiler.Compile(function);``
