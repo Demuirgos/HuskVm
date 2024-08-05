@@ -410,7 +410,7 @@ namespace iLang.Parsers
 
             int index = 0;
             compilationUnit = null;
-            List<SyntaxTree> body = new();
+            List<FunctionDef> body = new();
             while (index < code.Length)
             {
                 if (!ParseFunction(code, ref index, out FunctionDef? function))

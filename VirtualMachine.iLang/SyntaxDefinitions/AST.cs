@@ -39,7 +39,7 @@ namespace iLang.SyntaxDefinitions
     }
     public record VarDeclaration(Identifier Name, Expression Value) : Statement;
     public record Assignment(Identifier Name, Expression Value) : Statement;
-    public record CompilationUnit(SyntaxTree[] Body) : SyntaxTree
+    public record CompilationUnit(FunctionDef[] Body) : SyntaxTree
     {
         public override string ToString() => string.Join("\n", Body.Select(x => x.ToString()));
     }

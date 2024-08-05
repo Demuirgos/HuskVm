@@ -175,14 +175,7 @@ namespace iLang.Compilers.RegisterTarget
 
         private static void CompileUnaryOp(UnaryOp unaryOp, Context<Registers> context, FunctionContext functionContext)
         {
-            int memoryLocation = context.Variables.Count;
             CompileExpression(unaryOp.Right, context, functionContext);
-            context.Bytecode.Add(Mov, mof, memoryLocation);
-            context.Bytecode.Add(Mov, cjo, 0);
-            context.Bytecode.Add(Store, eax, mof, cjo);
-
-            context.Bytecode.Add(Mov, mof, memoryLocation);
-            context.Bytecode.Add(Load, eax, mof, cjo);
             switch (unaryOp.Op.Value)
             {
                 case '!':
@@ -191,8 +184,6 @@ namespace iLang.Compilers.RegisterTarget
                 case '-':
                     context.Bytecode.Add(Mov, ebx, -1);
                     context.Bytecode.Add(Mul, eax, eax, ebx);
-                    break;
-                case '+':
                     break;
                 default:
                     throw new NotImplementedException();

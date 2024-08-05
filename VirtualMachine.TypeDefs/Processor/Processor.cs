@@ -1,14 +1,29 @@
 
 using System;
 using System.Linq;
+using VirtualMachine.TypeDefs.Processor;
 
 namespace VirtualMachine.Processor
 {
     public interface IVirtualMachine<T> {
         IVirtualMachine<T> LoadProgram(byte[] program);
-        IVirtualMachine<T> Run();
+        IVirtualMachine<T> Run<TTimer>(ITracer<T>? tracer = null, ITimer<TTimer>? timer = null);
         Instruction.Instruction<T>[] InstructionsSet { get; }
         IState<T> State { get; }
+    }
+
+    public interface ITracer<T>
+    {
+        void Trace(IVirtualMachine<T> vm);
+    }
+
+    public interface ITimer<T> : IDisposable 
+    {
+        T Resource { get; }
+        void Start();
+        void Restart();
+        void Stop();
+        void Reset();
     }
 
     public interface IState<T> 
@@ -24,11 +39,18 @@ namespace VirtualMachine.Processor
             State.Program = program;
             return this;
         }
-        public IVirtualMachine<T> Run() {
-            while (State.ProgramCounter < State.Program.Length) {
+        public IVirtualMachine<T> Run<TTimer>(ITracer<T> tracer, ITimer<TTimer>? timer) {
+            tracer ??= NullTracer<T>.Instance;
+            timer ??= NullTimer<TTimer>.Instance;
+            timer.Start();
+            tracer.Trace(this);
+            while (State.ProgramCounter < State.Program.Length)
+            {
                 var opCode = State.Program[State.ProgramCounter++];
                 InstructionsSet[opCode].Apply(this);
+                tracer.Trace(this);
             }
+            timer.Stop();
             return this;
         }
         protected BaseVirtualMachine(Instruction.Instruction<T>[] instructionsSet, IState<T> state) {
