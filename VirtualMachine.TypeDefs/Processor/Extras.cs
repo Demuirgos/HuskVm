@@ -18,6 +18,10 @@ namespace VirtualMachine.TypeDefs.Processor
         public static NullTimer<T> Instance { get; } = new NullTimer<T>();
         public T Resource { get; } = default(T);
 
+        public void Clear()
+        {
+        }
+
         public void Dispose()
         {
         }

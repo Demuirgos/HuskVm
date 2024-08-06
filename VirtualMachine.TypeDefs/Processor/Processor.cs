@@ -24,6 +24,7 @@ namespace VirtualMachine.Processor
         void Restart();
         void Stop();
         void Reset();
+        void Clear();
     }
 
     public interface IState<T> 

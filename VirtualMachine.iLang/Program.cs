@@ -17,11 +17,11 @@ if (args.Length < 2)
     return;
 }
 
-var tokens = args[0].Split(' ').Select(s => s.Replace("-", string.Empty)).ToList();
+var tokens = args.Select(s => s.Replace("-", string.Empty)).ToList();
 string[] modes = ["i", "cr", "cs"];
 
 var mode = tokens.Find(word => modes.Contains(word));
-var filePath = args[1];
+var filePath = args[0];
 var shouldTime = tokens.Contains("t");
 var shouldDisassemble = tokens.Contains("d");
 var shouldTrace = tokens.Contains("tr");
@@ -39,23 +39,18 @@ if (!modes.Contains(mode))
 
 Parsers.ParseCompilationUnit(code, out var function);
 
-ITimer<Stopwatch> watch = shouldTime ? NullTimer<Stopwatch>.Instance : new Timer<Stopwatch>();
-switch (mode)
+ITimer<Stopwatch> watch = shouldTime ? new Timer<Stopwatch>(): NullTimer<Stopwatch>.Instance;
+object result = mode switch
 {
-    case "-i":
-        InterpreterRun(watch, function);
-        break;
-    case "-cr":
-        RegisterRun(watch, function);
-        break;
-    case "-cs":
-        StackRun(watch, function);
-        break;
-    default:
-        Console.WriteLine("Invalid mode");
-        break;
+    "i" => InterpreterRun(watch, function),
+    "cr" => RegisterRun(watch, function),
+    "cs" => StackRun(watch, function),
+    _ => throw new Exception("Invalid mode")
+};
 
-}
+Console.WriteLine(result);
+if(shouldTime) Console.WriteLine(watch.Resource.ElapsedMilliseconds);
+
 static object InterpreterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
 {
     Value result = Interpreter.Interpret(function, watch);

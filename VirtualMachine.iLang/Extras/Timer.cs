@@ -13,6 +13,11 @@ namespace VirtualMachine.iLang.Extras
         public List<TimeSpan> Logs { get; set; } = new List<TimeSpan>();
         public Stopwatch Resource { get; } = new Stopwatch();
 
+        public void Clear()
+        {
+            Logs.Clear();
+        }
+
         public void Dispose()
         {
             Resource.Stop();
