@@ -3,25 +3,25 @@ using VirtualMachine.Example.Stack;
 using Boolean = iLang.SyntaxDefinitions.Boolean;
 using static VirtualMachine.Instructions.InstructionsExt.StacksExt;
 using VirtualMachine.iLang.Compilers;
+using String = System.String;
+using VirtualMachine.Example.Register;
 namespace iLang.Compilers.StacksCompiler
 {
     public static class Compiler
     {
         private class FunctionContext() : Context<Stacks>(String.Empty)
         {
+            public string CurrentNamespace { get; set; } = System.String.Empty;
             public Dictionary<string, Bytecode<Stacks>> Functions { get; } = new();
             public Bytecode<Stacks> MachineCode { get; } = new(new List<Opcode<Stacks>>());
 
             public byte[] Collapse()
             {
-                int AbsoluteValue(int value) => value < 0 ? -value : value;
-                int Address(string name) => AbsoluteValue(name.GetHashCode() % 1024);
-
                 Dictionary<string, int> functionOffsets = new();
                 int offsetRegionSet = Functions.Count * 16 + 6;
 
                 MachineCode.Add(Push, offsetRegionSet);
-                MachineCode.Add(Push, Address("Main"));
+                MachineCode.Add(Push, Tools.Address("Main"));
                 MachineCode.Add(Push, 1);
                 MachineCode.Add(Store);
 
@@ -30,7 +30,7 @@ namespace iLang.Compilers.StacksCompiler
                 {
                     if (function.Key == "Main") continue;
                     MachineCode.Add(Push, acc);
-                    MachineCode.Add(Push, Address(function.Key));
+                    MachineCode.Add(Push, Tools.Address(function.Key));
                     MachineCode.Add(Push, 1);
                     MachineCode.Add(Store);
 
@@ -103,7 +103,7 @@ namespace iLang.Compilers.StacksCompiler
             {
                 CompileExpression(arg, context, functionContext);
             }
-            context.Bytecode.Add(Push, ((Identifier)call.Function).Value);
+            context.Bytecode.Add(Push, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
             context.Bytecode.Add(Call);
         }
 
@@ -332,9 +332,6 @@ namespace iLang.Compilers.StacksCompiler
 
         private static void CompileConditional(IfStatement conditional, Context<Stacks> context, FunctionContext functionContext)
         {
-            int AbsoluteValue(int value) => value < 0 ? -value : value;
-            int Address(string name) => AbsoluteValue(name.GetHashCode() % 1024);
-
             CompileExpression(conditional.Condition, context, functionContext);
             context.Bytecode.Add(Push, 14);
             context.Bytecode.Add(Push, 0);
@@ -350,7 +347,7 @@ namespace iLang.Compilers.StacksCompiler
             var falseSlice = new Bytecode<Stacks>(context.Bytecode.Instruction[current..]);
             context.Bytecode.RemoveRange(current);
 
-            int offsetIndex = Address(context.Name);
+            int offsetIndex = Tools.Address(context.Name);
 
             context.Bytecode.Add(Push, offsetIndex);
             context.Bytecode.Add(Push, 1);
@@ -376,14 +373,15 @@ namespace iLang.Compilers.StacksCompiler
             context.Bytecode.AddRange(trueSlice);
         }
 
-        private static void CompileFunction(FunctionDef function, FunctionContext functionContext)
+        private static void CompileFunction(string @namespace, FunctionDef function, FunctionContext functionContext)
         {
-            if (functionContext.Functions.ContainsKey(function.Name.Value))
+            string mangledName = Tools.Mangle(@namespace, function.Name);
+            if (functionContext.Functions.ContainsKey(mangledName))
             {
                 throw new Exception($"Function {function.Name.Value} already defined");
             }
 
-            var localContext = new Context<Stacks>(function.Name.Value);
+            var localContext = new Context<Stacks>(mangledName);
 
             var functionArgs = function.Args.Items.Reverse().ToArray();
             for (int i = 0; i < functionArgs.Length; i++)
@@ -411,17 +409,35 @@ namespace iLang.Compilers.StacksCompiler
                 localContext.Bytecode.Add(Halt);
             }
 
-            functionContext.Functions[function.Name.Value] = localContext.Bytecode;
+            functionContext.Functions[mangledName] = localContext.Bytecode;
         }
 
-        public static byte[] Compile(CompilationUnit compilationUnit)
+        public static byte[] Compile(CompilationUnit compilationUnit, string @namespace = "")
         {
             var functionContext = new FunctionContext();
+
+            foreach (var library in compilationUnit.inludes)
+            {
+                functionContext.CurrentNamespace = library.Key;
+                foreach (var function in library.Value.Body)
+                {
+                    if (function is FunctionDef functionDef)
+                    {
+                        CompileFunction(library.Key, functionDef, functionContext);
+                    }
+                    else
+                    {
+                        throw new Exception($"Unknown tree type {function.GetType()}");
+                    }
+                }
+            }
+
+            functionContext.CurrentNamespace = @namespace;
             foreach (var tree in compilationUnit.Body)
             {
                 if (tree is FunctionDef function)
                 {
-                    CompileFunction(function, functionContext);
+                    CompileFunction(@namespace, function, functionContext);
                 }
                 else
                 {

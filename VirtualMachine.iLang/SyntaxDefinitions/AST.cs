@@ -12,8 +12,12 @@ namespace iLang.SyntaxDefinitions
     public record Statement : SyntaxTree;
     public record Expression : SyntaxTree;
     public record Atom : Expression;
-    public record Identifier(string Value) : Atom;
+    public record Identifier(params string[] Values) : Atom
+    {
+        public string Value => string.Join(".", Values);
+    }
     public record Number(double Value) : Atom;
+    public record String(string Value) : Atom;
     public record Boolean(bool Value) : Atom;
     public record Operation(char Value);
     public record ArgumentList(Identifier[] Items) : SyntaxTree
@@ -28,18 +32,20 @@ namespace iLang.SyntaxDefinitions
     public record IfStatement(Expression Condition, Block True, Block False) : Statement;
     public record WhileStatement(Expression Condition, Block Body) : Statement;
     public record ParenthesisExpr(Expression Body) : Expression;
+    public record FilePath(string Path, string Alias);
+    public record IncludeFile(FilePath[] Paths) : Statement;
     public record ParameterList(Expression[] Items) : SyntaxTree
     {
         public override string ToString() => $"({string.Join(", ", Items.Select(x => x.ToString()))})";
     }
-    public record CallExpr(SyntaxTree Function, ParameterList Args) : Expression;
+    public record CallExpr(Identifier Function, ParameterList Args) : Expression;
     public record Block(Statement[] Items) : SyntaxTree
     {
         public override string ToString() => string.Join("\n", Items.Select(x => x.ToString()));
     }
     public record VarDeclaration(Identifier Name, Expression Value) : Statement;
     public record Assignment(Identifier Name, Expression Value) : Statement;
-    public record CompilationUnit(FunctionDef[] Body) : SyntaxTree
+    public record CompilationUnit(Dictionary<string, CompilationUnit> inludes, FunctionDef[] Body) : SyntaxTree
     {
         public override string ToString() => string.Join("\n", Body.Select(x => x.ToString()));
     }

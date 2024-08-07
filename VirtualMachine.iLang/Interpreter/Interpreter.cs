@@ -15,21 +15,57 @@ namespace iLang.Interpreter
     internal record Nil : Value
     {
         public static Nil Instance { get; } = new Nil();
+        public override string ToString() => "nil";
     }
-    internal record Decimal(double Value) : Value;
-    internal record Boolean(bool Value) : Value;
-
-
-
-    internal class Context
+    internal record Decimal(double Value) : Value
     {
+        public override string ToString() => Value.ToString();
+    }
+    internal record Boolean(bool Value) : Value
+    {
+        public override string ToString() => Value.ToString();
+    }
+
+
+
+    internal class Context(string namespaceName)
+    {
+        public string CurrentLibrary { get; set; } = namespaceName;
         public Dictionary<string, Value> Variables { get; set; } = new Dictionary<string, Value>();
     }
+
+    internal class FunctionsContext
+    {
+        public void AddFunction(FunctionDef function)
+        {
+            Functions[function.Name.Value] = function;
+        }
+
+        public void AddFunctions(CompilationUnit compilationUnit)
+        {
+            foreach(var function in compilationUnit.Body)
+            {
+                AddFunction(function);
+            }
+        }
+
+        public Dictionary<string, FunctionDef> Functions { get; set; } = new Dictionary<string, FunctionDef>();
+        
+        public FunctionDef this[string key]
+        {
+            get => Functions[key];
+            set => Functions[key] = value;
+        }
+        
+    }
+
     internal class GlobalContext
     {
+        public Dictionary<string, FunctionsContext> Libraries { get; set; } = new Dictionary<string, FunctionsContext>();
         public Dictionary<string, Value> GlobalVariables { get; set; } = new Dictionary<string, Value>();
-        public Dictionary<string, FunctionDef> Functions { get; set; } = new Dictionary<string, FunctionDef>();
         public Stack<Context> ContextStack { get; set; } = new Stack<Context>();
+
+
     }
     internal class Interpreter
     {
@@ -39,20 +75,26 @@ namespace iLang.Interpreter
 
             var context = new GlobalContext();
 
-            foreach(var function in compilation.Body)
+            var mainContext = new FunctionsContext();
+            mainContext.AddFunctions(compilation);
+            context.Libraries[string.Empty] = mainContext;
+
+            foreach (var library in compilation.inludes)
             {
-                context.Functions[function.Name.Value] = function;
+                var libraryContext = new FunctionsContext();
+                libraryContext.AddFunctions(library.Value);
+                context.Libraries[library.Key] = libraryContext;
             }
 
-            var result = InterpretFunctionCall(context.Functions["Main"], [], context);
+            var result = InterpretFunctionCall(string.Empty, context.Libraries[string.Empty]["Main"], [], context);
 
             timer?.Stop();
             return result;
         }
 
-        private static Value InterpretFunctionCall(FunctionDef functionDef, Value[] arguments, GlobalContext context)
+        private static Value InterpretFunctionCall(string namespaceName, FunctionDef functionDef, Value[] arguments, GlobalContext context)
         {
-            var newContext = new Context();
+            var newContext = new Context(namespaceName);
             context.ContextStack.Push(newContext);
 
             for (int i = 0; i < arguments.Length; i++)
@@ -128,7 +170,21 @@ namespace iLang.Interpreter
                     return InterpretUnary(unaryOp, context);
                 case CallExpr callExpr:
                     var args = callExpr.Args.Items.Select(x => InterpretExpression(x, context)).ToArray();
-                    return InterpretFunctionCall(context.Functions[((Identifier)callExpr.Function).Value], args, context);
+
+                    var containingNamespace = callExpr.Function.Values.Length switch
+                    {
+                        1 => context.ContextStack.Peek().CurrentLibrary,
+                        2 => callExpr.Function.Values[0],
+                        _ => throw new Exception("Invalid function call")
+                    };
+
+                    var func = callExpr.Function.Values.Length switch
+                    {
+                        1 => context.Libraries[containingNamespace][callExpr.Function.Value],
+                        2 => context.Libraries[containingNamespace][callExpr.Function.Values[1]],
+                        _ => throw new Exception("Invalid function call")
+                    };
+                    return InterpretFunctionCall(containingNamespace, func, args, context);
                 default:
                     throw new Exception("Invalid expression");
             }

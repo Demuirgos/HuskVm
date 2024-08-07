@@ -9,7 +9,6 @@ using VirtualMachine.Example.Stack;
 using VirtualMachine.iLang.Extras;
 using VirtualMachine.Processor;
 using VirtualMachine.TypeDefs.Processor;
-
 // get mode and file path from command line arguments
 if (args.Length < 2)
 {

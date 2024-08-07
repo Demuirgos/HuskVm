@@ -2,7 +2,7 @@
   "profiles": {
     "VirtualMachine.iLang": {
       "commandName": "Project",
-      "commandLineArgs": "C:\\Users\\Ayman\\Downloads\\Sum.il -cr -t "
+      "commandLineArgs": "main.il -cs -t"
     }
   }
 }

@@ -11,4 +11,13 @@
     <ProjectReference Include="..\VirtualMachine.Example\VirtualMachine.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="main.il">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Sum.il">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

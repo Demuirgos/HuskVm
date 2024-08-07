@@ -1,4 +1,5 @@
-﻿using System;
+﻿using iLang.SyntaxDefinitions;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -13,7 +14,7 @@ namespace VirtualMachine.iLang.Compilers
 {
     class Opcode<T>(Instruction<T> instruction, Operand[] Operands)
     {
-        public override string ToString() => $"{instruction.Name} {String.Join(" ", Operands.Select(x => x.ToString()))}";
+        public override string ToString() => $"{instruction.Name} {System.String.Join(" ", Operands.Select(x => x.ToString()))}";
 
         public Instruction<T> Op { get; } = instruction;
         public Operand[] Operands { get; set; } = Operands;
@@ -63,6 +64,19 @@ namespace VirtualMachine.iLang.Compilers
         public string Name { get; set; } = name;
         public Bytecode<T> Bytecode { get; } = new(new List<Opcode<T>>());
         public Dictionary<string, int> Variables { get; } = new();
+    }
+
+    internal static class Tools
+    {
+        public static string Mangle(string nameSpace, Identifier name)
+        {
+            if(System.String.IsNullOrEmpty(nameSpace)) return name.Value;
+            if(name.Values.Length == 1) return $"{nameSpace}.{name.Values[0]}";
+            return name.Value;
+        }
+
+        public static int AbsoluteValue(int value) => value < 0 ? -value : value;
+        public static int Address(string name) => AbsoluteValue(name.GetHashCode() % 1024);
     }
 
 }

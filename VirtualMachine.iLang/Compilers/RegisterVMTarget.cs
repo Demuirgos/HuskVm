@@ -18,22 +18,21 @@ namespace iLang.Compilers.RegisterTarget
         private static int cjo = 6;
         private static int mof = 7;
 
-        private class FunctionContext() : Context<Registers>(String.Empty)
+
+        private class FunctionContext() : Context<Registers>(System.String.Empty)
         {
-            public Dictionary<string, Bytecode<Registers>> Functions { get; } = new();
+            public string CurrentNamespace { get; set; } = System.String.Empty;
+            public Dictionary<string, Bytecode<Registers>> Functions{ get; } = new();
             public Bytecode<Registers> MachineCode { get; } = new(new List<Opcode<Registers>>());
 
             public byte[] Collapse()
             {
-                int AbsoluteValue(int value) => value < 0 ? -value : value;
-                int Address(string name) => AbsoluteValue(name.GetHashCode() % 1024);
-
+                
                 Dictionary<string, int> functionOffsets = new();
                 int offsetRegionSet = Functions.Count * 22 + 8;
 
-
                 MachineCode.Add(Mov, eax, offsetRegionSet); // 6
-                MachineCode.Add(Mov, mof, Address("Main")); // 6
+                MachineCode.Add(Mov, mof, Tools.Address("Main")); // 6
                 MachineCode.Add(Mov, cjo, 1); // 6
                 MachineCode.Add(Store, eax, mof, cjo); // 1 + 1 + 1 + 1 = 4
 
@@ -42,7 +41,7 @@ namespace iLang.Compilers.RegisterTarget
                 {
                     if (function.Key == "Main") continue;
                     MachineCode.Add(Mov, eax, acc);
-                    MachineCode.Add(Mov, mof, Address(function.Key));
+                    MachineCode.Add(Mov, mof, Tools.Address(function.Key));
                     MachineCode.Add(Mov, cjo, 1);
                     MachineCode.Add(Store, eax, mof, cjo);
 
@@ -73,6 +72,7 @@ namespace iLang.Compilers.RegisterTarget
                         instruction.Operands[1] = functionOffsets[placeholder.atom];
                     }
                 }
+                
 
                 return MachineCode.Instruction.SelectMany<Opcode<Registers>, byte>(x => {
                     switch(x.Op.Name)
@@ -132,7 +132,7 @@ namespace iLang.Compilers.RegisterTarget
                 argumentMemoryLocation += 1;
             }
 
-            context.Bytecode.Add(Mov, fco, ((Identifier)call.Function).Value);
+            context.Bytecode.Add(Mov, fco, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
             context.Bytecode.Add(Call, fco);
         }
 
@@ -371,19 +371,17 @@ namespace iLang.Compilers.RegisterTarget
 
         }
 
-        private static void CompileFunction(FunctionDef function, FunctionContext functionContext)
+        private static void CompileFunction(string @namespace, FunctionDef function, FunctionContext functionContext)
         {
-            if (functionContext.Functions.ContainsKey(function.Name.Value))
+            string mangledName = Tools.Mangle(@namespace, function.Name);
+            if (functionContext.Functions.ContainsKey(mangledName))
             {
                 throw new Exception($"Function {function.Name.Value} already defined");
             }
 
-            var localContext = new Context<Registers>(function.Name.Value);
+            var localContext = new Context<Registers>(mangledName);
 
-            int AbsoluteValue(int value) => value < 0 ? -value : value;
-            int Address(string name) => AbsoluteValue(name.GetHashCode() % 1024);
-
-            int offsetIndex = Address(localContext.Name);
+            int offsetIndex = Tools.Address(mangledName);
             localContext.Bytecode.Add(Mov, edx, offsetIndex);
             localContext.Bytecode.Add(Mov, ecx, 1);
             localContext.Bytecode.Add(Load, edx, edx, ecx);
@@ -416,17 +414,36 @@ namespace iLang.Compilers.RegisterTarget
                 localContext.Bytecode.Add(Halt);
             }
 
-            functionContext.Functions[function.Name.Value] = localContext.Bytecode;
+            functionContext.Functions[mangledName] = localContext.Bytecode;
         }
 
-        public static byte[] Compile(CompilationUnit compilationUnit)
+        public static byte[] Compile(CompilationUnit compilationUnit, string @namespace = "")
         {
             var functionContext = new FunctionContext();
+
+            foreach (var library in compilationUnit.inludes)
+            {
+                functionContext.CurrentNamespace = library.Key;
+                foreach (var function in library.Value.Body)
+                {
+                    if (function is FunctionDef functionDef)
+                    {
+                        CompileFunction(library.Key, functionDef, functionContext);
+                    }
+                    else
+                    {
+                        throw new Exception($"Unknown tree type {function.GetType()}");
+                    }
+                }
+            }
+
+
+            functionContext.CurrentNamespace = @namespace;
             foreach (var tree in compilationUnit.Body)
             {
                 if (tree is FunctionDef function)
                 {
-                    CompileFunction(function, functionContext);
+                    CompileFunction(@namespace, function, functionContext);
                 }
                 else
                 {
