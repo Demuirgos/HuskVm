@@ -328,7 +328,7 @@ namespace iLang.Parsers
             return true;
         }
 
-        private static bool ParseVariavleAssignement(string code, ref int index, out Assignment? assignment)
+        private static bool ParseVariableAssignement(string code, ref int index, out Assignment? assignment)
         {
             assignment = null;
             int start = index;
@@ -375,7 +375,7 @@ namespace iLang.Parsers
                 statement = varDeclaration;
                 return true;
             }
-            else if (ParseVariavleAssignement(code, ref index, out Assignment? assignment))
+            else if (ParseVariableAssignement(code, ref index, out Assignment? assignment))
             {
                 statement = assignment;
                 return true;
@@ -487,7 +487,7 @@ namespace iLang.Parsers
 
         public static bool ParseCompilationUnit(string code, out CompilationUnit compilationUnit)
         {
-            code = code.Replace(" ", "").Replace("\n", "").Replace("\r", "");
+            code = code.Replace(" ", "").Replace("\n", "").Replace("\r", "").Replace("\t", "");
 
             int index = 0;
             compilationUnit = null;

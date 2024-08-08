@@ -17,7 +17,7 @@ if (args.Length < 2)
 }
 
 var tokens = args.Select(s => s.Replace("-", string.Empty)).ToList();
-string[] modes = ["i", "cr", "cs"];
+string[] modes = ["i", "cr", "cs", "p"];
 
 var mode = tokens.Find(word => modes.Contains(word));
 var filePath = args[0];
@@ -37,6 +37,11 @@ if (!modes.Contains(mode))
 }
 
 Parsers.ParseCompilationUnit(code, out var function);
+
+if(mode == "p") {
+    Console.WriteLine(function);
+    return;
+}
 
 ITimer<Stopwatch> watch = shouldTime ? new Timer<Stopwatch>(): NullTimer<Stopwatch>.Instance;
 object result = mode switch

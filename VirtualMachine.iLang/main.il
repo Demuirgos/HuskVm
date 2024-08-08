@@ -1,9 +1,12 @@
 include["Sum.il" as sum];
-SumRangeRec : [a, b] => {
-    if (a = b) then {
-        return 0;
-    } else {
-        return a + SumRangeRec(a + 1, b);
-    }
+
+SumRange : [a, b] => {
+    var sum <- 0;
+    while (a < b) do {
+		sum <- sum + a;
+		a <- a + 1;
+	}
+	return sum;
 }; 
-Main: SumRangeRec(0, 11);
+
+Main: SumRange(0, 11) = sum.SumRange(0, 11);
