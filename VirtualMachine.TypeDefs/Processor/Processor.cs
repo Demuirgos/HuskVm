@@ -7,7 +7,8 @@ namespace VirtualMachine.Processor
 {
     public interface IVirtualMachine<T> {
         IVirtualMachine<T> LoadProgram(byte[] program);
-        IVirtualMachine<T> Run<TTimer>(ITracer<T>? tracer = null, ITimer<TTimer>? timer = null);
+        IVirtualMachine<T> Run<TTimer>(ITimer<TTimer>? timer = null);
+        IVirtualMachine<T> Trace<TTimer>(ITracer<T>? tracer = null, ITimer<TTimer>? timer = null);
         Instruction.Instruction<T>[] InstructionsSet { get; }
         IState<T> State { get; }
     }
@@ -40,16 +41,27 @@ namespace VirtualMachine.Processor
             State.Program = program;
             return this;
         }
-        public IVirtualMachine<T> Run<TTimer>(ITracer<T> tracer, ITimer<TTimer>? timer) {
-            tracer ??= NullTracer<T>.Instance;
-            timer ??= NullTimer<TTimer>.Instance;
-            timer.Start();
-            tracer.Trace(this);
+
+        public IVirtualMachine<T> Trace<TTimer>(ITracer<T>? tracer = null, ITimer<TTimer>? timer = null)
+        {
+            timer?.Start();
+            tracer?.Trace(this);
             while (State.ProgramCounter < State.Program.Length)
             {
                 var opCode = State.Program[State.ProgramCounter++];
                 InstructionsSet[opCode].Apply(this);
-                tracer.Trace(this);
+                tracer?.Trace(this);
+            }
+            timer?.Stop();
+            return this;
+        }
+
+        public IVirtualMachine<T> Run<TTimer>(ITimer<TTimer>? timer) {
+            timer.Start();
+            while (State.ProgramCounter < State.Program.Length)
+            {
+                var opCode = State.Program[State.ProgramCounter++];
+                InstructionsSet[opCode].Apply(this);
             }
             timer.Stop();
             return this;

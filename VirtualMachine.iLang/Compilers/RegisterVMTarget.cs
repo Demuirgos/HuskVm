@@ -3,8 +3,7 @@ using Boolean = iLang.SyntaxDefinitions.Boolean;
 using static VirtualMachine.Instructions.InstructionsExt.RegistersExt;
 using VirtualMachine.Example.Register;
 using VirtualMachine.iLang.Compilers;
-using VirtualMachine.Example.Stack;
-using System;
+using VirtualMachine.Example;
 namespace iLang.Compilers.RegisterTarget
 {
     public static class Compiler
@@ -100,15 +99,13 @@ namespace iLang.Compilers.RegisterTarget
 
         private static void CompileCall(CallExpr call, Context<Registers> context, FunctionContext functionContext)
         {
-            // get stack frame size
-            int stackframeSize = 16;
-
+            
             // very very very bad workaround
             int argumentMemoryLocation = 0;
             foreach (var arg in call.Args.Items)
             {
                 CompileExpression(arg, context, functionContext);
-                context.Bytecode.Add(Mov, mof, stackframeSize + argumentMemoryLocation);
+                context.Bytecode.Add(Mov, mof, Constants.frameSize + argumentMemoryLocation);
                 context.Bytecode.Add(Mov, cjo, 0);
                 context.Bytecode.Add(Store, eax, mof, cjo);
                 
@@ -167,6 +164,9 @@ namespace iLang.Compilers.RegisterTarget
                 case '-':
                     context.Bytecode.Add(Mov, ebx, -1);
                     context.Bytecode.Add(Mul, eax, eax, ebx);
+                    break;
+                case '+':
+                    // do nothing
                     break;
                 default:
                     throw new NotImplementedException();
@@ -236,8 +236,7 @@ namespace iLang.Compilers.RegisterTarget
 
             CompileExpression(loop.Condition, context, functionContext);
             context.Bytecode.Add(Dup, cjc, eax);
-            context.Bytecode.Add(Not, cjc, cjc);
-            context.Bytecode.Add(Mov, eax, -1);
+            context.Bytecode.Add(Mov, eax, 0);
             context.Bytecode.Add(Eq, cjc, eax, cjc);
 
             context.Bytecode.Add(Mov, cjo, bodySlice.Size + 8); // 6

@@ -71,7 +71,14 @@ object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationU
     IVirtualMachine<Registers> vm_r = new VirtualMachine.Example.Register.VirtualMachine();
     vm_r.LoadProgram(program_r);
 
-    _ = vm_r.Run(tracer_r, watch);
+    if(shouldTrace)
+    {
+        vm_r.Trace(tracer_r, watch);
+    } else
+    {
+        vm_r.Run(watch);
+    }
+
     return vm_r.State.Holder[0];
 }
 
@@ -85,7 +92,13 @@ object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit
     IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
     vm_s.LoadProgram(program_s);
 
-    _ = vm_s.Run(tracer_s, watch);
+    if(shouldTrace)
+    {
+        vm_s.Trace(tracer_s, watch);
+    } else
+    {
+        vm_s.Run(watch);
+    }
 
     return vm_s.State.Holder.Operands.LastOrDefault();
 }

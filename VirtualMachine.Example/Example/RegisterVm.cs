@@ -190,16 +190,12 @@ public static class Instructions {
             int isGlobalReg = span[2];
             state.ProgramCounter += 3;
 
-            Range stackFrame = 0..512;
-            Range globalFrame = 0..512;
-            int frameSize = 16;
-
             if (Registers[isGlobalReg] != 0)
             {
-                Registers[Register] = state.Memory[globalFrame.Start.Value + Registers[addressReg]];
+                Registers[Register] = state.Memory[Constants.globalFrame.Start.Value + Registers[addressReg]];
             } else
             {
-                int offset = Registers[addressReg] + (state.Holder.Calls.Count - 1) * frameSize;
+                int offset = Registers[addressReg] + (state.Holder.Calls.Count - 1) * Constants.frameSize;
                 Registers[Register] = state.Memory[offset];
             }
             return vm;
@@ -217,17 +213,12 @@ public static class Instructions {
             int addressReg = span[1];
             int isGlobalReg = span[2];
 
-
-            Range stackFrame = 0..512;
-            Range globalFrame = 0..512;
-            int frameSize = 16;
-
             if (Registers[isGlobalReg] != 0)
             {
-                state.Memory[globalFrame.Start.Value + Registers[addressReg]] = Registers[Register];
+                state.Memory[Constants.globalFrame.Start.Value + Registers[addressReg]] = Registers[Register];
             } else
             {
-                int offset = Registers[addressReg] + (state.Holder.Calls.Count - 1) * frameSize;
+                int offset = Registers[addressReg] + (state.Holder.Calls.Count - 1) * Constants.frameSize;
                 state.Memory[offset] = Registers[Register];
             }
 
@@ -362,9 +353,8 @@ public static class Instructions {
     }
 }
 
-public record Registers(int Count) {
+public record Registers(int Count) : SupportsCall {
     public int[] Items { get; set; } = new int[Count];
-    public Stack<int> Calls { get; set; } = new Stack<int>();
     public int this[int index] {
         get => Items[index];
         set => Items[index] = value;

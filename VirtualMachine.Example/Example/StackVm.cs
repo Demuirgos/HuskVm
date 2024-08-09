@@ -153,18 +153,15 @@ public static class Instructions {
             var stack = state.Holder.Operands;
             int isGlobal = stack.Pop();
             int address = stack.Pop();
-            // stackFrame [0, 512], global [512, 1024]
-            Range stackFrame = 0..512;
-            Range globalFrame = 0..512;
-            int frameSize = 16;
 
+            
             if (isGlobal != 0)
             {
-                stack.Push(state.Memory[globalFrame.Start.Value + address]);
+                stack.Push(state.Memory[Constants.globalFrame.Start.Value + address]);
             }
             else
             {
-                int offset = address + (state.Holder.Calls.Count - 1) * frameSize;
+                int offset = address + (state.Holder.Calls.Count - 1) * Constants.frameSize;
                 stack.Push(state.Memory[offset]);
             }
 
@@ -183,15 +180,11 @@ public static class Instructions {
             int address = stack.Pop();
             int value = stack.Pop();
 
-            Range stackFrame = 0..512;
-            Range globalFrame = 0..512;
-            int frameSize = 16;
-
             if (isGlobal != 0)
             {
-                state.Memory[globalFrame.Start.Value + address] = value;
+                state.Memory[Constants.globalFrame.Start.Value + address] = value;
             } else {
-                int offset = address + (state.Holder.Calls.Count - 1) * frameSize;
+                int offset = address + (state.Holder.Calls.Count - 1) * Constants.frameSize;
                 state.Memory[offset] = value;
             }
 
@@ -300,12 +293,11 @@ public static class Instructions {
     }
 }
 
-public class Stacks
+public record Stacks : SupportsCall
 {
     public Stack<int> Operands { get; set; } = new Stack<int>();
-    public Stack<int> Calls { get; set; } = new Stack<int>();
 
-    public override string ToString() => $"Operands: [{string.Join(", ", Operands)}], Calls: [{string.Join(", ", Calls)}]";
+    public override string ToString() => $"[{string.Join(", ", Operands)}]";
 }
 
 public record StackState() : IState<Stacks> {
