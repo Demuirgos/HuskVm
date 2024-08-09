@@ -4,6 +4,7 @@ using static VirtualMachine.Instructions.InstructionsExt.RegistersExt;
 using VirtualMachine.Example.Register;
 using VirtualMachine.iLang.Compilers;
 using VirtualMachine.Example.Stack;
+using System;
 namespace iLang.Compilers.RegisterTarget
 {
     public static class Compiler
@@ -22,36 +23,18 @@ namespace iLang.Compilers.RegisterTarget
         private class FunctionContext() : Context<Registers>(System.String.Empty)
         {
             public string CurrentNamespace { get; set; } = System.String.Empty;
-            public Dictionary<string, Bytecode<Registers>> Functions{ get; } = new();
+            public Dictionary<string, Bytecode<Registers>> Functions { get; } = new();
             public Bytecode<Registers> MachineCode { get; } = new(new List<Opcode<Registers>>());
 
             public byte[] Collapse()
             {
                 
                 Dictionary<string, int> functionOffsets = new();
-                int offsetRegionSet = Functions.Count * 22 + 8;
-
-                MachineCode.Add(Mov, eax, offsetRegionSet); // 6
-                MachineCode.Add(Mov, mof, Tools.Address("Main")); // 6
-                MachineCode.Add(Mov, cjo, 1); // 6
-                MachineCode.Add(Store, eax, mof, cjo); // 1 + 1 + 1 + 1 = 4
-
-                int acc = Functions["Main"].Size + offsetRegionSet;
-                foreach (var function in Functions)
-                {
-                    if (function.Key == "Main") continue;
-                    MachineCode.Add(Mov, eax, acc);
-                    MachineCode.Add(Mov, mof, Tools.Address(function.Key));
-                    MachineCode.Add(Mov, cjo, 1);
-                    MachineCode.Add(Store, eax, mof, cjo);
-
-                    acc += function.Value.Size;
-                }
-
+                
                 MachineCode.Add(Mov, fco, "Main"); // 6
                 MachineCode.Add(Call, fco); // 2
 
-                functionOffsets["Main"] = offsetRegionSet;
+                functionOffsets["Main"] = 8;
                 MachineCode.AddRange(Functions["Main"]);
 
                 foreach (var function in Functions)
@@ -121,7 +104,7 @@ namespace iLang.Compilers.RegisterTarget
             int stackframeSize = 16;
 
             // very very very bad workaround
-            int argumentMemoryLocation = 1;
+            int argumentMemoryLocation = 0;
             foreach (var arg in call.Args.Items)
             {
                 CompileExpression(arg, context, functionContext);
@@ -246,11 +229,10 @@ namespace iLang.Compilers.RegisterTarget
         private static void CompileLoop(WhileStatement loop, Context<Registers> context, FunctionContext functionContext)
         {
             int loopStart = context.Bytecode.Size;
-            int current = context.Bytecode.Instruction.Count;
 
-            CompileBlock(loop.Body, context, functionContext);
-            var bodySlice = new Bytecode<Registers>(context.Bytecode.Instruction[current..]);
-            context.Bytecode.RemoveRange(current);
+            var snapshot = context.Snapshot;
+            CompileBlock(loop.Body, snapshot, functionContext);
+            var bodySlice = new Bytecode<Registers>(snapshot.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
             CompileExpression(loop.Condition, context, functionContext);
             context.Bytecode.Add(Dup, cjc, eax);
@@ -258,20 +240,13 @@ namespace iLang.Compilers.RegisterTarget
             context.Bytecode.Add(Mov, eax, -1);
             context.Bytecode.Add(Eq, cjc, eax, cjc);
 
-            // load function offset
-            context.Bytecode.Add(Mov, edx, 0); // 6
-            context.Bytecode.Add(Load, edx, edx, edx); // 4
-            context.Bytecode.Add(Mov, ecx, context.Bytecode.Size + bodySlice.Size + 35); // 6
-            context.Bytecode.Add(Add, cjo, ecx, edx); // 4
-
+            context.Bytecode.Add(Mov, cjo, bodySlice.Size + 8); // 6
             context.Bytecode.Add(CJump, cjc, cjo); // 3
              
-            context.Bytecode.AddRange(bodySlice);
-            context.Bytecode.Add(Mov, ecx, loopStart); // 6
-
-            context.Bytecode.Add(Mov, edx, 0); // 6
-            context.Bytecode.Add(Load, edx, edx, edx); // 4
-            context.Bytecode.Add(Add, cjo, ecx, edx); // 4
+            CompileBlock(loop.Body, context, functionContext);
+            
+            int jumpBack = 6 + 2 + context.Bytecode.Size - loopStart;
+            context.Bytecode.Add(Mov, cjo, -jumpBack); // 6
             context.Bytecode.Add(Jump, cjo); // 2
         }
 
@@ -337,37 +312,27 @@ namespace iLang.Compilers.RegisterTarget
 
         private static void CompileConditional(IfStatement conditional, Context<Registers> context, FunctionContext functionContext)
         {
-            
-
             CompileExpression(conditional.Condition, context, functionContext);
             context.Bytecode.Add(Dup, cjc, eax);
 
-            int current = context.Bytecode.Instruction.Count;
-            CompileBlock(conditional.True, context, functionContext);
-            var trueSlice = new Bytecode<Registers>(context.Bytecode.Instruction[current..]);
-            context.Bytecode.RemoveRange(current);
 
-            CompileBlock(conditional.False, context, functionContext);
-            var falseSlice = new Bytecode<Registers>(context.Bytecode.Instruction[current..]);
-            context.Bytecode.RemoveRange(current);
+            Context<Registers> snapshot1 = context.Snapshot;
+            CompileBlock(conditional.True, snapshot1, functionContext);
+            var trueSlice = new Bytecode<Registers>(snapshot1.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
-            context.Bytecode.Add(Mov, edx, 0); // 6
-            context.Bytecode.Add(Load, edx, edx, edx); // 4
-            context.Bytecode.Add(Mov, ecx, context.Bytecode.Size + falseSlice.Size + 35); // 6
-            context.Bytecode.Add(Add, cjo, ecx, edx); // 4
+            Context<Registers> snapshot2 = context.Snapshot;
+            CompileBlock(conditional.False, snapshot2, functionContext);
+            var falseSlice = new Bytecode<Registers>(snapshot2.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
+            context.Bytecode.Add(Mov, cjo, falseSlice.Size + 8); // 6
             context.Bytecode.Add(CJump, cjc, cjo); // 3
 
-            context.Bytecode.AddRange(falseSlice); // falseSlice.Size
+            CompileBlock(conditional.False, context, functionContext);
 
-            context.Bytecode.Add(Mov, edx, 0); // 6
-            context.Bytecode.Add(Load, edx, edx, edx); // 4
-            context.Bytecode.Add(Mov, ecx, context.Bytecode.Size + trueSlice.Size + 12); // 6
-            context.Bytecode.Add(Add, cjo, ecx, edx); // 4
-
+            context.Bytecode.Add(Mov, cjo, trueSlice.Size); // 6
             context.Bytecode.Add(Jump, cjo); // 2
 
-            context.Bytecode.AddRange(trueSlice); // trueSlice.Size
+            CompileBlock(conditional.True, context, functionContext);
 
         }
 
@@ -380,21 +345,11 @@ namespace iLang.Compilers.RegisterTarget
             }
 
             var localContext = new Context<Registers>(mangledName);
-
-            int offsetIndex = Tools.Address(mangledName);
-            localContext.Bytecode.Add(Mov, edx, offsetIndex);
-            localContext.Bytecode.Add(Mov, ecx, 1);
-            localContext.Bytecode.Add(Load, edx, edx, ecx);
-
-            localContext.Bytecode.Add(Mov, eax, 0);
-            localContext.Bytecode.Add(Store, edx, eax, eax);
-
-            localContext.Variables["this"] = 0;
-
+            
             var functionArgs = function.Args.Items.ToArray();
             for (int i = 0; i < functionArgs.Length; i++)
             {
-                localContext.Variables[functionArgs[i].Value] = i + 1;
+                localContext.Variables[functionArgs[i].Value] = i;
             }
 
             switch (function.Body)

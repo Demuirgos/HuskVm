@@ -18,29 +18,11 @@ namespace iLang.Compilers.StacksCompiler
             public byte[] Collapse()
             {
                 Dictionary<string, int> functionOffsets = new();
-                int offsetRegionSet = Functions.Count * 16 + 6;
-
-                MachineCode.Add(Push, offsetRegionSet);
-                MachineCode.Add(Push, Tools.Address("Main"));
-                MachineCode.Add(Push, 1);
-                MachineCode.Add(Store);
-
-                int acc = Functions["Main"].Size + offsetRegionSet;
-                foreach (var function in Functions)
-                {
-                    if (function.Key == "Main") continue;
-                    MachineCode.Add(Push, acc);
-                    MachineCode.Add(Push, Tools.Address(function.Key));
-                    MachineCode.Add(Push, 1);
-                    MachineCode.Add(Store);
-
-                    acc += function.Value.Size;
-                }
 
                 MachineCode.Add(Push, "Main");
                 MachineCode.Add(Call);
 
-                functionOffsets["Main"] = offsetRegionSet;
+                functionOffsets["Main"] = 6;
                 MachineCode.AddRange(Functions["Main"]);
 
                 foreach (var function in Functions)
@@ -226,48 +208,33 @@ namespace iLang.Compilers.StacksCompiler
 
         private static void CompileLoop(WhileStatement loop, Context<Stacks> context, FunctionContext functionContext)
         {
-            int AbsoluteValue(int value) => value < 0 ? -value : value;
-            int Address(string name) => AbsoluteValue(name.GetHashCode() % 1024);
-
             int current = context.Bytecode.Instruction.Count;
             int currentSize = context.Bytecode.Size;
 
-            CompileBlock(loop.Body, context, functionContext);
-
-            var bodySlice = new Bytecode<Stacks>(context.Bytecode.Instruction[current..]);
-            context.Bytecode.RemoveRange(current);
+            var snapshot = context.Snapshot;
+            CompileBlock(loop.Body, snapshot, functionContext);
+            var bodySliceSize = new Bytecode<Stacks>(snapshot.Bytecode.Instruction.Skip(context.Bytecode.Instruction.Count).ToList()).Size;
 
             CompileExpression(loop.Condition, context, functionContext);
-            context.Bytecode.Add(Push, 14);
+            context.Bytecode.Add(Push, 14); // 30 + bodySlice.Size
+            context.Bytecode.Add(Push, 0); // 29 + bodySlice.Size
+            context.Bytecode.Add(Store); // 25 + bodySlice.Size
+
+            context.Bytecode.Add(Push, bodySliceSize + 6); // 24 + bodySlice.Size
+            context.Bytecode.Add(Push, 14); // 19 + bodySlice.Size
             context.Bytecode.Add(Push, 0);
-            context.Bytecode.Add(Store);
+            context.Bytecode.Add(Load); // 14 + bodySlice.Size
 
-            int offsetIndex = Address(context.Name);
+            context.Bytecode.Add(Push, 0); // 13 + bodySlice.Size
+            context.Bytecode.Add(Eq); // 8 + bodySlice.Size
 
-            context.Bytecode.Add(Push, offsetIndex);
-            context.Bytecode.Add(Push, 1);
-            context.Bytecode.Add(Load);
-            context.Bytecode.Add(Push, context.Bytecode.Size + bodySlice.Size + 42);
-            context.Bytecode.Add(Add);
+            context.Bytecode.Add(CJump); // 7  + bodySlice.Size
 
-            context.Bytecode.Add(Push, 14);
-            context.Bytecode.Add(Push, 0);
-            context.Bytecode.Add(Load);
+            CompileBlock(loop.Body, context, functionContext); // 6 + bodySlice.Size
 
-            context.Bytecode.Add(Push, 0);
-            context.Bytecode.Add(Eq);
-
-            context.Bytecode.Add(CJump);
-
-            context.Bytecode.AddRange(bodySlice);
-
-            context.Bytecode.Add(Push, offsetIndex);
-            context.Bytecode.Add(Push, 1);
-            context.Bytecode.Add(Load);
-            context.Bytecode.Add(Push, currentSize);
-            context.Bytecode.Add(Add);
-
-            context.Bytecode.Add(Jump);
+            int jumpSize = 6 + context.Bytecode.Size - currentSize;
+            context.Bytecode.Add(Push, -jumpSize); // 6
+            context.Bytecode.Add(Jump); // 1
         }
 
         private static void CompileBlock(Block block, Context<Stacks> context, FunctionContext functionContext)
@@ -332,45 +299,24 @@ namespace iLang.Compilers.StacksCompiler
 
         private static void CompileConditional(IfStatement conditional, Context<Stacks> context, FunctionContext functionContext)
         {
-            CompileExpression(conditional.Condition, context, functionContext);
-            context.Bytecode.Add(Push, 14);
-            context.Bytecode.Add(Push, 0);
-            context.Bytecode.Add(Store);
+            Context<Stacks> snapshot1 = context.Snapshot;
+            CompileBlock(conditional.True, snapshot1, functionContext);
+            var trueSlice = new Bytecode<Stacks>(snapshot1.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
-            int current = context.Bytecode.Instruction.Count;
+            Context<Stacks> snapshot2 = context.Snapshot;
+            CompileBlock(conditional.False, snapshot2, functionContext);
+            var falseSlice = new Bytecode<Stacks>(snapshot2.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
+
+            context.Bytecode.Add(Push, falseSlice.Size + 6); // 5
+            CompileExpression(conditional.Condition, context, functionContext);
+            context.Bytecode.Add(CJump); // 17
+
+            CompileBlock(conditional.False, context, functionContext); // 17 + falseSlice.Size
+
+            context.Bytecode.Add(Push, trueSlice.Size); // 22 + falseSlice.Size
+            context.Bytecode.Add(Jump); // 23 + falseSlice.Size
 
             CompileBlock(conditional.True, context, functionContext);
-            var trueSlice = new Bytecode<Stacks>(context.Bytecode.Instruction[current..]);
-            context.Bytecode.RemoveRange(current);
-
-            CompileBlock(conditional.False, context, functionContext);
-            var falseSlice = new Bytecode<Stacks>(context.Bytecode.Instruction[current..]);
-            context.Bytecode.RemoveRange(current);
-
-            int offsetIndex = Tools.Address(context.Name);
-
-            context.Bytecode.Add(Push, offsetIndex);
-            context.Bytecode.Add(Push, 1);
-            context.Bytecode.Add(Load);
-            context.Bytecode.Add(Push, context.Bytecode.Size + falseSlice.Size + 36);
-            context.Bytecode.Add(Add);
-
-            context.Bytecode.Add(Push, 14);
-            context.Bytecode.Add(Push, 0);
-            context.Bytecode.Add(Load);
-
-            context.Bytecode.Add(CJump);
-
-            context.Bytecode.AddRange(falseSlice);
-
-            context.Bytecode.Add(Push, offsetIndex);
-            context.Bytecode.Add(Push, 1);
-            context.Bytecode.Add(Load);
-            context.Bytecode.Add(Push, context.Bytecode.Size + trueSlice.Size + 7);
-            context.Bytecode.Add(Add);
-            context.Bytecode.Add(Jump);
-
-            context.Bytecode.AddRange(trueSlice);
         }
 
         private static void CompileFunction(string @namespace, FunctionDef function, FunctionContext functionContext)

@@ -62,8 +62,33 @@ namespace VirtualMachine.iLang.Compilers
     internal class Context<T>(string name)
     {
         public string Name { get; set; } = name;
-        public Bytecode<T> Bytecode { get; } = new(new List<Opcode<T>>());
-        public Dictionary<string, int> Variables { get; } = new();
+        public Bytecode<T> Bytecode { get; init; } = new(new List<Opcode<T>>());
+        public Dictionary<string, int> Variables { get; init;  } = new();
+
+        public Context<T> Snapshot
+        {
+            get
+            {
+                var newDict = new Dictionary<string, int>();
+
+                foreach (var keyValuePair in Variables)
+                {
+                    newDict[keyValuePair.Key] = keyValuePair.Value;
+                }
+
+                var insutrctions = new List<Opcode<T>>();
+                foreach (var opcode in this.Bytecode.Instruction)
+                {
+                    insutrctions.Add(new Opcode<T>(opcode.Op, opcode.Operands));
+                }
+
+                return new Context<T>(this.Name)
+                {
+                    Bytecode = new Bytecode<T>(insutrctions),
+                    Variables = newDict
+                };
+            }
+        }
     }
 
     internal static class Tools

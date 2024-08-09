@@ -55,16 +55,18 @@ object result = mode switch
 Console.WriteLine(result);
 if(shouldTime) Console.WriteLine(watch.Resource.ElapsedMilliseconds);
 
-static object InterpreterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
+object InterpreterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
 {
     Value result = Interpreter.Interpret(function, watch);
     return result;
 }
 
-static object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
+object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
 {
-    var tracer_r = new Tracer<Registers>();
+    ITracer<Registers> tracer_r = shouldTrace ? new Tracer<Registers>() : NullTracer<Registers>.Instance;
     byte[] program_r = iLang.Compilers.RegisterTarget.Compiler.Compile(function);
+
+    if (shouldDisassemble) Console.WriteLine(AssemblyBuilder<Registers>.Disassemble(program_r));
 
     IVirtualMachine<Registers> vm_r = new VirtualMachine.Example.Register.VirtualMachine();
     vm_r.LoadProgram(program_r);
@@ -73,10 +75,12 @@ static object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.Compi
     return vm_r.State.Holder[0];
 }
 
-static object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
+object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
 {
-    var tracer_s = new Tracer<Stacks>();
+    ITracer<Stacks> tracer_s = shouldTrace ? new Tracer<Stacks>() : NullTracer<Stacks>.Instance;
     byte[] program_s = iLang.Compilers.StacksCompiler.Compiler.Compile(function);
+
+    if (shouldDisassemble) Console.WriteLine(AssemblyBuilder<Stacks>.Disassemble(program_s));
 
     IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
     vm_s.LoadProgram(program_s);

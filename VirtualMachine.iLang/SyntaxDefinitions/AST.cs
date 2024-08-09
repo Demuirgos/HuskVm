@@ -47,7 +47,25 @@ namespace iLang.SyntaxDefinitions
     public record Assignment(Identifier Name, Expression Value) : Statement;
     public record CompilationUnit(Dictionary<string, CompilationUnit> inludes, FunctionDef[] Body) : SyntaxTree
     {
-        public override string ToString() => string.Join("\n", Body.Select(x => x.ToString()));
+        public override string ToString() {
+            var sb = new StringBuilder();
+
+            if (inludes.Count > 0) {
+                sb.AppendLine("Includes:");
+                foreach (var item in inludes)
+                {
+                    sb.AppendLine($"{item.Key}:");
+                    sb.AppendLine(item.Value.ToString());
+                }
+            }
+
+            sb.AppendLine($"toplevel:");
+            foreach (var item in Body)
+            {
+                sb.AppendLine(item.ToString());
+            }
+            return sb.ToString();
+        }
     }
 
 }

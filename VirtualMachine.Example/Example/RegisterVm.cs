@@ -154,7 +154,7 @@ public static class Instructions {
             var Registers = state.Holder;
             var span = state.Program.AsSpan(state.ProgramCounter, 1);
             int valueReg = span[0];
-            state.ProgramCounter = Registers[valueReg];
+            state.ProgramCounter += 1 + Registers[valueReg];
             return vm;
         }
     }
@@ -168,10 +168,11 @@ public static class Instructions {
             var span = state.Program.AsSpan(state.ProgramCounter, 2);
             int condition = span[0];
             int value = span[1];
-            if(Registers[condition] != 0) {
-                state.ProgramCounter = Registers[value];
-            } else {
-                state.ProgramCounter += 2;
+
+            state.ProgramCounter += 2;
+
+            if (Registers[condition] != 0) {
+                state.ProgramCounter += Registers[value];
             }
             return vm;
         }

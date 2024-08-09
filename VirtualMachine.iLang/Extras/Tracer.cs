@@ -20,9 +20,12 @@ namespace VirtualMachine.iLang.Extras
                 var instruction = vm.InstructionsSet[state.Program[state.ProgramCounter]];
                 sb.Append($"OP: {instruction.Name} ");
             }
-            sb.Append($"MEM: {string.Join(", ", state.Memory)} ");
             sb.Append($"REG: {state.Holder} ");
-            TraceLog.Add(sb.ToString());
+            string trace = sb.ToString();
+
+            Console.WriteLine(trace);
+
+            TraceLog.Add(trace);
         }
 
         public override string ToString()

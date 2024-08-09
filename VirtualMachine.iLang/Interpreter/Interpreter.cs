@@ -162,6 +162,8 @@ namespace iLang.Interpreter
             {
                 case Number number:
                     return new Decimal(number.Value);
+                case SyntaxDefinitions.Boolean boolean:
+                    return new Boolean(boolean.Value);
                 case Identifier identifier:
                     return context.ContextStack.Peek().Variables[identifier.Value];
                 case BinaryOp binaryOp:
@@ -185,8 +187,10 @@ namespace iLang.Interpreter
                         _ => throw new Exception("Invalid function call")
                     };
                     return InterpretFunctionCall(containingNamespace, func, args, context);
+                case ParenthesisExpr parentheses:
+                    return InterpretExpression(parentheses.Body, context);
                 default:
-                    throw new Exception("Invalid expression");
+                    throw new Exception($"Invalid expression : {value}");
             }
         }
 

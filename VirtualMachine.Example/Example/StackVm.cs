@@ -125,7 +125,7 @@ public static class Instructions {
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
-            state.ProgramCounter = stack.Pop();
+            state.ProgramCounter += stack.Pop();
             return vm;
         }
     }
@@ -139,7 +139,7 @@ public static class Instructions {
             var condition = stack.Pop() != 0;
             var offset = stack.Pop();
             if (condition) {
-                state.ProgramCounter = offset;
+                state.ProgramCounter += offset;
             }
             return vm;
         }
