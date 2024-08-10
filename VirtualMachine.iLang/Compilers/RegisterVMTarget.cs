@@ -30,10 +30,9 @@ namespace iLang.Compilers.RegisterTarget
                 
                 Dictionary<string, int> functionOffsets = new();
                 
-                MachineCode.Add(Mov, fco, "Main"); // 6
-                MachineCode.Add(Call, fco); // 2
+                MachineCode.Add(Call, "Main"); // 2
 
-                functionOffsets["Main"] = 8;
+                functionOffsets["Main"] = 5;
                 MachineCode.AddRange(Functions["Main"]);
 
                 foreach (var function in Functions)
@@ -45,30 +44,29 @@ namespace iLang.Compilers.RegisterTarget
 
                 foreach (var instruction in MachineCode.Instruction)
                 {
-                    if (instruction.Op == Mov && instruction.Operands[1] is Placeholder placeholder)
+                    if (instruction.Op == Call && instruction.Operands[0] is Placeholder placeholder)
                     {
                         if (!functionOffsets.ContainsKey(placeholder.atom))
                         {
                             throw new Exception($"Function {placeholder.atom} not found");
                         }
-                        instruction.Operands[1] = functionOffsets[placeholder.atom];
+                        instruction.Operands[0] = functionOffsets[placeholder.atom];
                     }
                 }
                 
 
                 return MachineCode.Instruction.SelectMany<Opcode<Registers>, byte>(x => {
-                    switch(x.Op.Name)
+                    if(x.Op.Name == Mov.Name)
                     {
-                        case "Mov":
-                        {
-                            return [ x.Op.OpCode, (Byte)((Value)x.Operands[0]).Number, ..BitConverter.GetBytes(((Value)x.Operands[1]).Number) ];
-                        }
-                        default:
-                        {
-                            return [ x.Op.OpCode, .. x.Operands.Select<Operand, byte>(o => (byte)((Value)o).Number) ];
-                        }
-
+                        return [ x.Op.OpCode, (Byte)((Value)x.Operands[0]).Number, .. BitConverter.GetBytes(((Value)x.Operands[1]).Number) ];
+                    } else if (x.Op.Name == Call.Name)
+                    {
+                        return [x.Op.OpCode, .. BitConverter.GetBytes(((Value)x.Operands[0]).Number)];
                     }
+                    else
+                    {
+                        return [ x.Op.OpCode, .. x.Operands.Select<Operand, byte>(o => (byte)((Value)o).Number) ];
+                    }   
                 }).ToArray();
             }
         }
@@ -112,26 +110,17 @@ namespace iLang.Compilers.RegisterTarget
                 argumentMemoryLocation += 1;
             }
 
-            context.Bytecode.Add(Mov, fco, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
-            context.Bytecode.Add(Call, fco);
+            context.Bytecode.Add(Call, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
         }
 
         private static void CompileBinaryOp(BinaryOp binaryOp, Context<Registers> context, FunctionContext functionContext)
         {
-            int leftMemoryLocation = context.Variables.Count;
             CompileExpression(binaryOp.Left, context, functionContext);
-            context.Bytecode.Add(Mov, mof, leftMemoryLocation);
+            context.Bytecode.Add(Mov, mof, context.Variables.Count);
             context.Bytecode.Add(Mov, cjo, 0);
             context.Bytecode.Add(Store, eax, mof, cjo);
-            int rightMemoryLocation = context.Variables.Count + 1;
             CompileExpression(binaryOp.Right, context, functionContext);
-            context.Bytecode.Add(Mov, mof, rightMemoryLocation);
-            context.Bytecode.Add(Mov, cjo, 0);
-            context.Bytecode.Add(Store, eax, mof, cjo);
-
-            context.Bytecode.Add(Mov, mof, leftMemoryLocation);
-            context.Bytecode.Add(Load, eax, mof, cjo);
-            context.Bytecode.Add(Mov, mof, rightMemoryLocation);
+            context.Bytecode.Add(Mov, mof, context.Variables.Count);
             context.Bytecode.Add(Load, ebx, mof, cjo);
 
             var binaryOpInstruction = binaryOp.Op.Value switch
@@ -150,7 +139,7 @@ namespace iLang.Compilers.RegisterTarget
                 _ => throw new NotImplementedException()
             };
 
-            context.Bytecode.Add(binaryOpInstruction, eax, eax, ebx);
+            context.Bytecode.Add(binaryOpInstruction, eax, ebx, eax);
         }
 
         private static void CompileUnaryOp(UnaryOp unaryOp, Context<Registers> context, FunctionContext functionContext)

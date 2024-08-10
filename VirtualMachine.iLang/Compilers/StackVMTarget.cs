@@ -19,10 +19,9 @@ namespace iLang.Compilers.StacksCompiler
             {
                 Dictionary<string, int> functionOffsets = new();
 
-                MachineCode.Add(Push, "Main");
-                MachineCode.Add(Call);
+                MachineCode.Add(Call, "Main");
 
-                functionOffsets["Main"] = 6;
+                functionOffsets["Main"] = 5;
                 MachineCode.AddRange(Functions["Main"]);
 
                 foreach (var function in Functions)
@@ -34,7 +33,7 @@ namespace iLang.Compilers.StacksCompiler
 
                 foreach (var instruction in MachineCode.Instruction)
                 {
-                    if (instruction.Op == Push && instruction.Operands[0] is Placeholder placeholder)
+                    if (instruction.Op == Call && instruction.Operands[0] is Placeholder placeholder)
                     {
                         if (!functionOffsets.ContainsKey(placeholder.atom))
                         {
@@ -85,8 +84,7 @@ namespace iLang.Compilers.StacksCompiler
             {
                 CompileExpression(arg, context, functionContext);
             }
-            context.Bytecode.Add(Push, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
-            context.Bytecode.Add(Call);
+            context.Bytecode.Add(Call, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
         }
 
         private static void CompileBinaryOp(BinaryOp binaryOp, Context<Stacks> context, FunctionContext functionContext)
@@ -112,7 +110,6 @@ namespace iLang.Compilers.StacksCompiler
                     break;
                 case '<':
                     context.Bytecode.Add(Lt);
-
                     break;
                 case '>':
                     context.Bytecode.Add(Gt);

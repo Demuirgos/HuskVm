@@ -1,6 +1,51 @@
-﻿using iLang.Compilers;
+﻿#define BENCHMARK
+#if BENCHMARK
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
 using iLang.Interpreter;
 using iLang.Parsers;
+using iLang.SyntaxDefinitions;
+using System.Collections;
+using System.Diagnostics;
+using VirtualMachine.Example.Register;
+using VirtualMachine.Example.Stack;
+using VirtualMachine.Processor;
+using VirtualMachine.TypeDefs.Processor;
+
+BenchmarkRunner.Run<VirtualMachineWar>();
+
+[MemoryDiagnoser]
+public class VirtualMachineWar
+{
+    private string FilePath { get; set; } = "main.il";
+    private CompilationUnit compilationUnit;
+    private byte[] registerBytes;
+    private byte[] stackBytes;
+    IVirtualMachine<Registers> vm_r = new VirtualMachine.Example.Register.VirtualMachine();
+    IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
+
+    public VirtualMachineWar()
+    {
+        var code = System.IO.File.ReadAllText(FilePath);
+        Parsers.ParseCompilationUnit(code, out compilationUnit);
+        registerBytes = iLang.Compilers.RegisterTarget.Compiler.Compile(compilationUnit);
+        stackBytes = iLang.Compilers.StacksCompiler.Compiler.Compile(compilationUnit);
+    }
+
+    [Benchmark]
+    public IVirtualMachine<Registers> RegisterVm() => vm_r.LoadProgram(registerBytes).Run(NullTimer<Stopwatch>.Instance);
+
+    [Benchmark]
+    public IVirtualMachine<Stacks> StackVm() => vm_s.LoadProgram(stackBytes).Run(NullTimer<Stopwatch>.Instance);
+
+    [Benchmark]
+    public Value InterpreterVm() => Interpreter.Interpret(compilationUnit, NullTimer<Stopwatch>.Instance);
+}
+#else
+using iLang.Compilers;
+using iLang.Interpreter;
+using iLang.Parsers;
+using iLang.SyntaxDefinitions;
 using System;
 using System.Diagnostics;
 using VirtualMachine.Builder;
@@ -36,7 +81,7 @@ if (!modes.Contains(mode))
     return;
 }
 
-Parsers.ParseCompilationUnit(code, out var function);
+Parsers.ParseCompilationUnit(code, out CompilationUnit function);
 
 if(mode == "p") {
     Console.WriteLine(function);
@@ -102,3 +147,4 @@ object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit
 
     return vm_s.State.Holder.Operands.LastOrDefault();
 }
+#endif

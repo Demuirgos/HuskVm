@@ -23,7 +23,7 @@ namespace iLang.Interpreter
     }
     internal record Boolean(bool Value) : Value
     {
-        public override string ToString() => Value.ToString();
+        public override string ToString() => (this.Value ? 1 : 0).ToString();
     }
 
 

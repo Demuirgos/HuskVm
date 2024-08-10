@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel.DataAnnotations;
 using VirtualMachine.Example;
 using VirtualMachine.Instruction;
@@ -255,7 +256,7 @@ public static class Instructions {
         }
     }
 
-    [Metadata(0, 0)]
+    [Metadata(0, 0, 4)]
     public partial class  Call : Instruction<Stacks>
     {
         public override byte OpCode { get; } = 0x14;
@@ -263,8 +264,9 @@ public static class Instructions {
         {
             var state = vm.State;
             var stack = state.Holder.Operands;
-            state.Holder.Calls.Push(state.ProgramCounter);
-            state.ProgramCounter = stack.Pop();
+            var funcId = state.Program.AsSpan(state.ProgramCounter, 4);
+            state.Holder.Calls.Push(state.ProgramCounter + 4);
+            state.ProgramCounter = BitConverter.ToInt32(funcId);
             return vm;
         }
     }

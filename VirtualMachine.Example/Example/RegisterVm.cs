@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using VirtualMachine.Instruction;
 using VirtualMachine.Processor;
@@ -314,7 +315,7 @@ public static class Instructions {
         }
     }
 
-    [Metadata(0, 0, 1)]
+    [Metadata(0, 0, 4)]
     public class Call : Instruction<Registers>
     {
         public override byte OpCode { get; } = 0x14;
@@ -322,10 +323,9 @@ public static class Instructions {
         {
             var state = vm.State;
             var Registers = state.Holder;
-            var span = state.Program.AsSpan(state.ProgramCounter, 1);
-            int addressReg = span[0];
-            Registers.Calls.Push(state.ProgramCounter + 1);
-            state.ProgramCounter = Registers[addressReg];
+            var funcId = state.Program.AsSpan(state.ProgramCounter, 4);
+            Registers.Calls.Push(state.ProgramCounter + 4);
+            state.ProgramCounter = BitConverter.ToInt32(funcId);
             return vm;
         }
     }
