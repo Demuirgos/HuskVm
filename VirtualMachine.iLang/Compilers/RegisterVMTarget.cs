@@ -119,8 +119,10 @@ namespace iLang.Compilers.RegisterTarget
             context.Bytecode.Add(Mov, mof, context.Variables.Count);
             context.Bytecode.Add(Mov, cjo, 0);
             context.Bytecode.Add(Store, eax, mof, cjo);
+            
             CompileExpression(binaryOp.Right, context, functionContext);
             context.Bytecode.Add(Mov, mof, context.Variables.Count);
+            context.Bytecode.Add(Mov, cjo, 0);
             context.Bytecode.Add(Load, ebx, mof, cjo);
 
             var binaryOpInstruction = binaryOp.Op.Value switch
@@ -224,9 +226,8 @@ namespace iLang.Compilers.RegisterTarget
             var bodySlice = new Bytecode<Registers>(snapshot.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
             CompileExpression(loop.Condition, context, functionContext);
-            context.Bytecode.Add(Dup, cjc, eax);
-            context.Bytecode.Add(Mov, eax, 0);
-            context.Bytecode.Add(Eq, cjc, eax, cjc);
+            context.Bytecode.Add(Mov, ebx, 0);
+            context.Bytecode.Add(Eq, cjc, eax, ebx);
 
             context.Bytecode.Add(Mov, cjo, bodySlice.Size + 8); // 6
             context.Bytecode.Add(CJump, cjc, cjo); // 3
@@ -301,7 +302,6 @@ namespace iLang.Compilers.RegisterTarget
         private static void CompileConditional(IfStatement conditional, Context<Registers> context, FunctionContext functionContext)
         {
             CompileExpression(conditional.Condition, context, functionContext);
-            context.Bytecode.Add(Dup, cjc, eax);
 
 
             Context<Registers> snapshot1 = context.Snapshot;
@@ -313,7 +313,7 @@ namespace iLang.Compilers.RegisterTarget
             var falseSlice = new Bytecode<Registers>(snapshot2.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
             context.Bytecode.Add(Mov, cjo, falseSlice.Size + 8); // 6
-            context.Bytecode.Add(CJump, cjc, cjo); // 3
+            context.Bytecode.Add(CJump, eax, cjo); // 3
 
             CompileBlock(conditional.False, context, functionContext);
 
