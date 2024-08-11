@@ -1,4 +1,4 @@
-include["Sum.il" as number];
+include["number.il" as number];
 
 IsPrime : [n] => {
     if (n < 3) then {

@@ -343,6 +343,27 @@ public static class Instructions {
         }
     }
 
+    [Metadata(0, 0, 1, 1)]
+    public class Swap : Instruction<Registers>
+    {
+        public override byte OpCode { get; } = 0x16;
+        public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm)
+        {
+            var state = vm.State;
+            var Registers = state.Holder;
+            var span = state.Program.AsSpan(state.ProgramCounter, 2);
+            int Register1 = span[0];
+            int Register2 = span[1];
+            state.ProgramCounter += 2;
+            int temp = Registers[Register1];
+            Registers[Register1] = Registers[Register2];
+            Registers[Register2] = temp;
+            return vm;
+        }
+    }
+
+
+
     [Metadata(0, 0)]
     public class Halt : Instruction<Registers> {
         public override byte OpCode { get; } = 0xff;

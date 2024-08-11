@@ -1,4 +1,4 @@
-﻿#define BENCHMARK
+﻿//#define BENCHMARK
 #if BENCHMARK
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;

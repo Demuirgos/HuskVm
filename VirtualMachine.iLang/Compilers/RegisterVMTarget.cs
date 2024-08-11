@@ -8,15 +8,15 @@ namespace iLang.Compilers.RegisterTarget
 {
     public static class Compiler
     {
-        private static int eax = 0;
-        private static int ebx = 1;
-        private static int ecx = 2;
-        private static int edx = 3;
+        private const int eax = 0;
+        private const int ebx = 1;
+        private const int ecx = 2;
+        private const int edx = 3;
         
-        private static int fco = 5;
-        private static int cjc = 4;
-        private static int cjo = 6;
-        private static int mof = 7;
+        private const int fco = 5;
+        private const int cjc = 4;
+        private const int cjo = 6;
+        private const int mof = 7;
 
 
         private class FunctionContext() : Context<Registers>(System.String.Empty)
@@ -30,9 +30,10 @@ namespace iLang.Compilers.RegisterTarget
                 
                 Dictionary<string, int> functionOffsets = new();
                 
-                MachineCode.Add(Call, "Main"); // 2
+                MachineCode.Add(Call, "Main"); // 5
+                MachineCode.Add(Halt); // 1
 
-                functionOffsets["Main"] = 5;
+                functionOffsets["Main"] = 6;
                 MachineCode.AddRange(Functions["Main"]);
 
                 foreach (var function in Functions)
@@ -116,14 +117,23 @@ namespace iLang.Compilers.RegisterTarget
         private static void CompileBinaryOp(BinaryOp binaryOp, Context<Registers> context, FunctionContext functionContext)
         {
             CompileExpression(binaryOp.Left, context, functionContext);
-            context.Bytecode.Add(Mov, mof, context.Variables.Count);
-            context.Bytecode.Add(Mov, cjo, 0);
-            context.Bytecode.Add(Store, eax, mof, cjo);
+
+            if(binaryOp.Right is Identifier rightId)
+            {
+                context.Bytecode.Add(Swap, eax, ebx);
+                CompileIdentifier(rightId, context, functionContext);
+            }
+            else
+            {
+                context.Bytecode.Add(Mov, mof, context.Variables.Count);
+                context.Bytecode.Add(Mov, cjo, 0);
+                context.Bytecode.Add(Store, eax, mof, cjo);
             
-            CompileExpression(binaryOp.Right, context, functionContext);
-            context.Bytecode.Add(Mov, mof, context.Variables.Count);
-            context.Bytecode.Add(Mov, cjo, 0);
-            context.Bytecode.Add(Load, ebx, mof, cjo);
+                CompileExpression(binaryOp.Right, context, functionContext);
+                context.Bytecode.Add(Mov, mof, context.Variables.Count);
+                context.Bytecode.Add(Mov, cjo, 0);
+                context.Bytecode.Add(Load, ebx, mof, cjo);
+            }
 
             var binaryOpInstruction = binaryOp.Op.Value switch
             {
@@ -347,14 +357,10 @@ namespace iLang.Compilers.RegisterTarget
                     break;
                 case Expression expression:
                     CompileExpression(expression, localContext, functionContext);
+                    localContext.Bytecode.Add(Ret);
                     break;
                 default:
                     throw new Exception($"Unknown body type {function.Body.GetType()}");
-            }
-
-            if (function.Name.Value == "Main")
-            {
-                localContext.Bytecode.Add(Halt);
             }
 
             functionContext.Functions[mangledName] = localContext.Bytecode;

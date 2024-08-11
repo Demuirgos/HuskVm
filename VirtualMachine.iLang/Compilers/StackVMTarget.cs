@@ -20,8 +20,9 @@ namespace iLang.Compilers.StacksCompiler
                 Dictionary<string, int> functionOffsets = new();
 
                 MachineCode.Add(Call, "Main");
+                MachineCode.Add(Halt);
 
-                functionOffsets["Main"] = 5;
+                functionOffsets["Main"] = 6;
                 MachineCode.AddRange(Functions["Main"]);
 
                 foreach (var function in Functions)
@@ -213,14 +214,10 @@ namespace iLang.Compilers.StacksCompiler
             var bodySliceSize = new Bytecode<Stacks>(snapshot.Bytecode.Instruction.Skip(context.Bytecode.Instruction.Count).ToList()).Size;
 
             CompileExpression(loop.Condition, context, functionContext);
-            context.Bytecode.Add(Push, 14); // 30 + bodySlice.Size
-            context.Bytecode.Add(Push, 0); // 29 + bodySlice.Size
-            context.Bytecode.Add(Store); // 25 + bodySlice.Size
 
             context.Bytecode.Add(Push, bodySliceSize + 6); // 24 + bodySlice.Size
-            context.Bytecode.Add(Push, 14); // 19 + bodySlice.Size
-            context.Bytecode.Add(Push, 0);
-            context.Bytecode.Add(Load); // 14 + bodySlice.Size
+
+            context.Bytecode.Add(Swap); // 8 + bodySlice.Size
 
             context.Bytecode.Add(Push, 0); // 13 + bodySlice.Size
             context.Bytecode.Add(Eq); // 8 + bodySlice.Size
@@ -342,14 +339,10 @@ namespace iLang.Compilers.StacksCompiler
                     break;
                 case Expression expression:
                     CompileExpression(expression, localContext, functionContext);
+                    localContext.Bytecode.Add(Ret);
                     break;
                 default:
                     throw new Exception($"Unknown body type {function.Body.GetType()}");
-            }
-
-            if (function.Name.Value == "Main")
-            {
-                localContext.Bytecode.Add(Halt);
             }
 
             functionContext.Functions[mangledName] = localContext.Bytecode;

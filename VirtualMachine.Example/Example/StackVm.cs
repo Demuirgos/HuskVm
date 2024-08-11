@@ -122,7 +122,7 @@ public static class Instructions {
 
     [Metadata(1, 0)]
     public partial class Jump : Instruction<Stacks> {
-        public override byte OpCode { get; } = 0x0c;
+        public override byte OpCode { get; } = 0x0b;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
@@ -133,7 +133,7 @@ public static class Instructions {
 
     [Metadata(2, 0)]
     public partial class CJump : Instruction<Stacks> {
-        public override byte OpCode { get; } = 0x0d;
+        public override byte OpCode { get; } = 0x0c;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
@@ -148,7 +148,7 @@ public static class Instructions {
 
     [Metadata(1, 0)]
     public partial class Load : Instruction<Stacks> {
-        public override byte OpCode { get; } = 0x0e;
+        public override byte OpCode { get; } = 0x0d;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
@@ -172,7 +172,7 @@ public static class Instructions {
 
     [Metadata(2, 0)]
     public partial class Store : Instruction<Stacks> {
-        public override byte OpCode { get; } = 0x0f;
+        public override byte OpCode { get; } = 0x0e;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
@@ -195,7 +195,7 @@ public static class Instructions {
 
     [Metadata(1, 2)]
     public partial class Dup : Instruction<Stacks> {
-        public override byte OpCode { get; } = 0x10;
+        public override byte OpCode { get; } = 0xf;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
@@ -207,7 +207,7 @@ public static class Instructions {
     [Metadata(2, 1)]
     public partial class Gt : Instruction<Stacks>
     {
-        public override byte OpCode { get; } = 0x11;
+        public override byte OpCode { get; } = 0x10;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm)
         {
             var state = vm.State;
@@ -220,7 +220,7 @@ public static class Instructions {
     [Metadata(2, 1)]
     public partial class Lt : Instruction<Stacks>
     {
-        public override byte OpCode { get; } = 0x16;
+        public override byte OpCode { get; } = 0x11;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm)
         {
             var state = vm.State;
@@ -279,6 +279,22 @@ public static class Instructions {
         {
             var state = vm.State;
             state.ProgramCounter = state.Holder.Calls.Pop();
+            return vm;
+        }
+    }
+
+    [Metadata(2, 2)]
+    public partial class Swap : Instruction<Stacks>
+    {
+        public override byte OpCode { get; } = 0x16;
+        public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm)
+        {
+            var state = vm.State;
+            var stack = state.Holder.Operands;
+            var a = stack.Pop();
+            var b = stack.Pop();
+            stack.Push(a);
+            stack.Push(b);
             return vm;
         }
     }
