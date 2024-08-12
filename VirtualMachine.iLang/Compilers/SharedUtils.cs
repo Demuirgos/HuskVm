@@ -95,9 +95,8 @@ namespace VirtualMachine.iLang.Compilers
     {
         public static string Mangle(string nameSpace, Identifier name)
         {
-            if(System.String.IsNullOrEmpty(nameSpace)) return name.Value;
-            if(name.Values.Length == 1) return $"{nameSpace}.{name.Values[0]}";
-            return name.Value;
+            if(System.String.IsNullOrEmpty(nameSpace)) return name.LocalName;
+            return name.FullName;
         }
 
         public static int AbsoluteValue(int value) => value < 0 ? -value : value;

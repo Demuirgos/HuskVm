@@ -38,7 +38,7 @@ namespace iLang.Interpreter
     {
         public void AddFunction(FunctionDef function)
         {
-            Functions[function.Name.Value] = function;
+            Functions[function.Name.LocalName] = function;
         }
 
         public void AddFunctions(CompilationUnit compilationUnit)
@@ -99,7 +99,7 @@ namespace iLang.Interpreter
 
             for (int i = 0; i < arguments.Length; i++)
             {
-                newContext.Variables[functionDef.Args.Items[i].Value] = arguments[i];
+                newContext.Variables[functionDef.Args.Items[i].Name.LocalName] = arguments[i];
                 
             }
 
@@ -121,12 +121,12 @@ namespace iLang.Interpreter
                 switch(statement)
                 {
                     case VarDeclaration varDeclaration:
-                        context.ContextStack.Peek().Variables[varDeclaration.Name.Value] = InterpretExpression(varDeclaration.Value, context);
+                        context.ContextStack.Peek().Variables[varDeclaration.Name.FullName] = InterpretExpression(varDeclaration.Value, context);
                         break;
                     case ReturnStatement returnStatement:
                         return InterpretExpression(returnStatement.Value, context);
                     case Assignment assignment:
-                        context.ContextStack.Peek().Variables[assignment.Name.Value] = InterpretExpression(assignment.Value, context);
+                        context.ContextStack.Peek().Variables[assignment.Name.FullName] = InterpretExpression(assignment.Value, context);
                         break;
                     case IfStatement ifStatement:
                         if(InterpretExpression(ifStatement.Condition, context) is Boolean condition1 && condition1.Value is true)
@@ -165,27 +165,15 @@ namespace iLang.Interpreter
                 case SyntaxDefinitions.Boolean boolean:
                     return new Boolean(boolean.Value);
                 case Identifier identifier:
-                    return context.ContextStack.Peek().Variables[identifier.Value];
+                    return context.ContextStack.Peek().Variables[identifier.FullName];
                 case BinaryOp binaryOp:
                     return InterpretBinaryOp(binaryOp, context);
                 case UnaryOp unaryOp:
                     return InterpretUnary(unaryOp, context);
                 case CallExpr callExpr:
                     var args = callExpr.Args.Items.Select(x => InterpretExpression(x, context)).ToArray();
-
-                    var containingNamespace = callExpr.Function.Values.Length switch
-                    {
-                        1 => context.ContextStack.Peek().CurrentLibrary,
-                        2 => callExpr.Function.Values[0],
-                        _ => throw new Exception("Invalid function call")
-                    };
-
-                    var func = callExpr.Function.Values.Length switch
-                    {
-                        1 => context.Libraries[containingNamespace][callExpr.Function.Value],
-                        2 => context.Libraries[containingNamespace][callExpr.Function.Values[1]],
-                        _ => throw new Exception("Invalid function call")
-                    };
+                    var containingNamespace = callExpr.Function.@namespace;
+                    var func = context.Libraries[containingNamespace][callExpr.Function.LocalName];
                     return InterpretFunctionCall(containingNamespace, func, args, context);
                 case ParenthesisExpr parentheses:
                     return InterpretExpression(parentheses.Body, context);

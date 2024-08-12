@@ -1,4 +1,4 @@
-Max : [a, b] => {
+Max : [a:Number, b:Number] => Number {
 	if (a > b) then {
 		return a;
 	} else {
@@ -6,7 +6,7 @@ Max : [a, b] => {
 	}
 }; 
 
-Min : [a, b] => {
+Min : [a:Number, b:Number] => Number {
 	if (a < b) then {
 		return a;
 	} else {
@@ -14,7 +14,7 @@ Min : [a, b] => {
 	}
 };
 
-Abs : [a] => {
+Abs : [a:Number] => Number {
 	if (a < 0) then {
 		return -a;
 	} else {
@@ -22,7 +22,7 @@ Abs : [a] => {
 	}
 };	
 
-Sum : [a, b] => {
+Sum : [a:Number, b:Number] => Number {
 	if (a = b) then {
 		return 0;
 	} else {
@@ -30,7 +30,7 @@ Sum : [a, b] => {
 	}
 };
 
-Product : [a, b] => {
+Product : [a:Number, b:Number] => Number {
 	if (a = b) then {
 		return 1;
 	} else {
@@ -38,7 +38,7 @@ Product : [a, b] => {
 	}
 };
 
-Factorial : [a] => {
+Factorial : [a:Number] => Number {
 	if (a = 0) then {
 		return 1;
 	} else {
@@ -46,7 +46,7 @@ Factorial : [a] => {
 	}
 };
 
-Fibonacci : [a] => {
+Fibonacci : [a:Number] => Number {
 	if (a < 2) then {
 		return a;
 	} else {
@@ -54,4 +54,23 @@ Fibonacci : [a] => {
 	}
 };
 
-
+IsPrime : [n:Number] => Logic {
+    if (n < 3) then {
+        return false;
+    } else {
+        let i : Number = 2;
+        if ((n % 2) = 0) then {
+			return n = 2;
+		} else {
+            i <- 3;
+            while ((i * i) < n) do {
+                if((n % i) = 0) then {
+                    return false;
+                } else {
+                    i <- i + 2;
+                }
+            }
+            return true;
+        }
+    }
+};

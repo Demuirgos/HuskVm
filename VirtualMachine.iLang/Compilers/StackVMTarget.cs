@@ -56,16 +56,16 @@ namespace iLang.Compilers.StacksCompiler
 
         private static void CompileIdentifier(Identifier identifier, Context<Stacks> context, FunctionContext functionContext)
         {
-            if (context.Variables.ContainsKey(identifier.Value))
+            if (context.Variables.ContainsKey(identifier.FullName))
             {
-                context.Bytecode.Add(Push, context.Variables[identifier.Value]);
+                context.Bytecode.Add(Push, context.Variables[identifier.FullName]);
                 context.Bytecode.Add(Push, 0);
                 context.Bytecode.Add(Load);
 
             }
             else
             {
-                throw new Exception($"Variable {identifier.Value} not found");
+                throw new Exception($"Variable {identifier.FullName} not found");
             }
         }
 
@@ -247,28 +247,28 @@ namespace iLang.Compilers.StacksCompiler
 
         private static void CompileVarDeclaration(VarDeclaration varDeclaration, Context<Stacks> context, FunctionContext functionContext)
         {
-            if (context.Variables.ContainsKey(varDeclaration.Name.Value))
+            if (context.Variables.ContainsKey(varDeclaration.Name.FullName))
             {
-                throw new Exception($"Variable {varDeclaration.Name.Value} already defined");
+                throw new Exception($"Variable {varDeclaration.Name.FullName} already defined");
             }
 
-            context.Variables[varDeclaration.Name.Value] = context.Variables.Count;
+            context.Variables[varDeclaration.Name.FullName] = context.Variables.Count;
 
             CompileExpression(varDeclaration.Value, context, functionContext);
-            context.Bytecode.Add(Push, context.Variables[varDeclaration.Name.Value]);
+            context.Bytecode.Add(Push, context.Variables[varDeclaration.Name.FullName]);
             context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Store);
         }
 
         private static void CompileAssignment(Assignment assignment, Context<Stacks> context, FunctionContext functionContext)
         {
-            if (!context.Variables.ContainsKey(assignment.Name.Value))
+            if (!context.Variables.ContainsKey(assignment.Name.FullName))
             {
-                throw new Exception($"Variable {assignment.Name.Value} not found");
+                throw new Exception($"Variable {assignment.Name.FullName} not found");
             }
 
             CompileExpression(assignment.Value, context, functionContext);
-            context.Bytecode.Add(Push, context.Variables[assignment.Name.Value]);
+            context.Bytecode.Add(Push, context.Variables[assignment.Name.FullName]);
             context.Bytecode.Add(Push, 0);
             context.Bytecode.Add(Store);
         }
@@ -318,7 +318,7 @@ namespace iLang.Compilers.StacksCompiler
             string mangledName = Tools.Mangle(@namespace, function.Name);
             if (functionContext.Functions.ContainsKey(mangledName))
             {
-                throw new Exception($"Function {function.Name.Value} already defined");
+                throw new Exception($"Function {function.Name.FullName} already defined");
             }
 
             var localContext = new Context<Stacks>(mangledName);
@@ -326,7 +326,7 @@ namespace iLang.Compilers.StacksCompiler
             var functionArgs = function.Args.Items.Reverse().ToArray();
             for (int i = 0; i < functionArgs.Length; i++)
             {
-                localContext.Variables[functionArgs[i].Value] = i;
+                localContext.Variables[functionArgs[i].Name.FullName] = i;
                 localContext.Bytecode.Add(Push, i);
                 localContext.Bytecode.Add(Push, 0);
                 localContext.Bytecode.Add(Store);

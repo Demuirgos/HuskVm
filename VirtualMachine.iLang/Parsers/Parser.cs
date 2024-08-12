@@ -1,9 +1,11 @@
-﻿using iLang.SyntaxDefinitions;
+﻿using CommandLine;
+using iLang.SyntaxDefinitions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VirtualMachine.iLang.Checker;
 using Boolean = iLang.SyntaxDefinitions.Boolean;
 using String = iLang.SyntaxDefinitions.String;
 
@@ -11,6 +13,20 @@ namespace iLang.Parsers
 {
     public static class Parsers
     {
+        private static bool PeekToken(string code, ref int index, string[] tokens)
+        {
+            int start = index;
+            foreach (var t in tokens)
+            {
+                if (code.Substring(index).StartsWith(t))
+                {
+                    return true;
+                }
+            }
+            index = start;
+            return false;
+        }
+
         private static bool ParseToken(string code, ref int index, string[] tokens, out string? token)
         {
             int start = index;
@@ -34,7 +50,7 @@ namespace iLang.Parsers
         }
         private static bool ParseIdentifier(string code, ref int index, out Atom? identifier)
         {
-            bool ParseSubIdentifier(string code, ref int index, out Atom? identifier)
+            bool ParseSubIdentifier(string code, ref int index, out string? identifier)
             {
                 identifier = null;
                 var start = index;
@@ -44,7 +60,7 @@ namespace iLang.Parsers
                     index++;
                 }
                 if (start == index) return Fail(code, ref index, start);
-                identifier = new Identifier(code[start..index]);
+                identifier = code[start..index];
                 return true;
             }
 
@@ -52,16 +68,25 @@ namespace iLang.Parsers
             var start = index;
             
             // parse name1.name2.name3
+            string namespaceName = string.Empty;
             List<string> subIdentifiers = new();
 
+            var token = string.Empty;
             do
             {
-                if (!ParseSubIdentifier(code, ref index, out Atom? subIdentifier)) 
+                if (!ParseSubIdentifier(code, ref index, out string? subIdentifier)) 
                     return Fail(code, ref index, start);
-                subIdentifiers.Add(((Identifier)subIdentifier).Value);
-            } while (ParseToken(code, ref index, ["."], out _));
 
-            identifier = new Identifier(subIdentifiers.ToArray());
+                if(PeekToken(code, ref index, ["::"]))
+                {
+                    namespaceName = subIdentifier;
+                } else
+                {
+                    subIdentifiers.Add(subIdentifier);
+                }
+            } while (ParseToken(code, ref index, [".", "::"], out token));
+
+            identifier = new Identifier(namespaceName, subIdentifiers.ToArray());
             return true;
         }
 
@@ -134,15 +159,26 @@ namespace iLang.Parsers
             return Fail(code, ref index, start);
         }
 
-        private static bool ParseArgumentList(string code, ref int index, out Atom[]? argList)
+        private static bool ParseArgument(string code, ref int index, out Argument? arg)
+        {
+            arg = null;
+            int start = index;
+            if (!ParseIdentifier(code, ref index, out Atom? identifier)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, [":"], out _)) return Fail(code, ref index, start);
+            if (!ParserType(code, ref index, out SyntaxDefinitions.Type? type)) return Fail(code, ref index, start);
+            arg = new Argument((Identifier)identifier, type);
+            return true;
+        }
+
+        private static bool ParseArgumentList(string code, ref int index, out ArgumentList? argList)
         {
             argList = null;
             int start = index;
 
             if (!ParseToken(code, ref index, ["["], out _)) return Fail(code, ref index, start);
-            List<Atom> args = new();
+            List<Argument> args = new();
             bool parseNextToken = true;
-            while (parseNextToken && ParseIdentifier(code, ref index, out var token))
+            while (parseNextToken && ParseArgument(code, ref index, out var token))
             {
                 args.Add(token);
                 if (!ParseToken(code, ref index, [",", "]"], out string? nextToken)) return Fail(code, ref index, start);
@@ -154,7 +190,7 @@ namespace iLang.Parsers
 
             if (args.Count == 0) return Fail(code, ref index, start);
 
-            argList = args.ToArray();
+            argList = new ArgumentList(args.ToArray());
             return true;
         }
 
@@ -319,12 +355,25 @@ namespace iLang.Parsers
         {
             varDeclaration = null;
             int start = index;
-            if (!ParseToken(code, ref index, ["var"], out _)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, ["let"], out _)) return Fail(code, ref index, start);
             if (!ParseIdentifier(code, ref index, out Atom? identifier)) return Fail(code, ref index, start);
-            if (!ParseToken(code, ref index, ["<-"], out _)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, [":"], out _)) return Fail(code, ref index, start);
+            if (!ParserType(code, ref index, out SyntaxDefinitions.Type? type)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, ["="], out _)) return Fail(code, ref index, start);
             if (!ParseExpression(code, ref index, out Expression? expression)) return Fail(code, ref index, start);
             if (!ParseToken(code, ref index, [";"], out _)) return Fail(code, ref index, start);
-            varDeclaration = new VarDeclaration((Identifier)identifier, expression);
+            varDeclaration = new VarDeclaration((Identifier)identifier, type, expression);
+            return true;
+        }
+
+        private static bool ParserType(string code, ref int index, out SyntaxDefinitions.Type? type)
+        {
+            if(!ParseIdentifier(code, ref index, out Atom? identifier))
+            {
+                type = null;
+                return false;
+            }
+            type = new SyntaxDefinitions.Type(((Identifier)identifier).FullName);
             return true;
         }
 
@@ -353,7 +402,7 @@ namespace iLang.Parsers
                 if (!ParseString(code, ref index, out String path)) return Fail(code, ref index, start);
                 if (!ParseToken(code, ref index, ["as"], out _)) return Fail(code, ref index, start);
                 if (!ParseIdentifier(code, ref index, out Atom alias)) return Fail(code, ref index, start);
-                paths.Add(new FilePath(path.Value, ((Identifier)alias).Value));
+                paths.Add(new FilePath(path.Value, ((Identifier)alias).FullName));
                 if (!ParseToken(code, ref index, [",", "]"], out string? token)) return Fail(code, ref index, start);
                 if (token == "]") break;
             }
@@ -434,8 +483,9 @@ namespace iLang.Parsers
 
             if (!ParseToken(code, ref index, [":"], out _)) return false;
 
-            Atom[]? argsList;
-            if (identifier is Identifier identifier1 && identifier1.Value.ToLower() != "main")
+            ArgumentList? argsList;
+            SyntaxDefinitions.Type? returnType = SyntaxDefinitions.Type.Any;
+            if (identifier is Identifier identifier1 && identifier1.FullName.ToLower() != "main")
             {
 
                 if (!ParseArgumentList(code, ref index, out argsList))
@@ -447,25 +497,86 @@ namespace iLang.Parsers
                 {
                     return false;
                 }
+
+                if(!ParserType(code, ref index, out returnType))
+                {
+                    returnType = SyntaxDefinitions.Type.Any; 
+                }
             }
             else
             {
-                argsList = Array.Empty<Atom>();
+                argsList = ArgumentList.Empty;
             }
 
-            if (ParseBlock(code, ref index, out Block? body))
+            Block block = null;
+            Expression expression = null;
+            if (!ParseBlock(code, ref index, out block) && !ParseExpression(code, ref index, out expression))
             {
-                if (!ParseToken(code, ref index, [";"], out _)) return false;
-                function = new FunctionDef((Identifier)identifier, new ArgumentList(argsList.Cast<Identifier>().ToArray()), body);
-                return true;
+                return false;
             }
-            else if (ParseExpression(code, ref index, out Expression? expression))
+            if (!ParseToken(code, ref index, [";"], out _)) return false;
+            function = new FunctionDef((Identifier)identifier, returnType, argsList, ((SyntaxTree)block) ?? ((SyntaxTree)expression));
+            return true;
+        }
+
+        private static bool ParseFieldDef(string code, ref int index, out FieldDef fieldDef)
+        {
+            fieldDef = null;
+            if (!ParseIdentifier(code, ref index, out Atom? identifier))
             {
-                if (!ParseToken(code, ref index, [";"], out _)) return false;
-                function = new FunctionDef((Identifier)identifier, new ArgumentList(argsList.Cast<Identifier>().ToArray()), expression);
-                return true;
+                return false;
             }
-            return false;
+            if (!ParseToken(code, ref index, [":"], out _))
+            {
+                return false;
+            }
+            if (!ParserType(code, ref index, out SyntaxDefinitions.Type? type))
+            {
+                return false;
+            }
+            if (!ParseToken(code, ref index, [";"], out _))
+            {
+                return false;
+            }
+            fieldDef = new FieldDef(((Identifier)identifier).FullName, type);
+            return true;
+        }
+
+        private static bool ParseTypeDef(string code, ref int index, out TypeDef typeDef)
+        {
+            typeDef = null;
+
+            if (!ParseToken(code, ref index, ["type"], out _))
+            {
+                return false;
+            }
+            
+            if (!ParseIdentifier(code, ref index, out Atom? identifier))
+            {
+                return false;
+            }
+
+            if (!ParseToken(code, ref index, ["{"], out _))
+            {
+                return false;
+            }
+
+            List<FieldDef> fields = new();
+            while (index < code.Length && code[index] != '}')
+            {
+                if (!ParseFieldDef(code, ref index, out FieldDef fieldDef))
+                {
+                    return false;
+                }
+                fields.Add(fieldDef);
+            }
+
+            if (!ParseToken(code, ref index, ["}"], out _))
+            {
+                return false;
+            }
+            typeDef = new TypeDef(((Identifier)identifier).FullName, fields.ToArray());
+            return true;
         }
 
         private static bool ParseIncludeRegion(string code, ref int index, out IncludeFile includeFiles)

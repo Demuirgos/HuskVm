@@ -51,6 +51,7 @@ using System.Diagnostics;
 using VirtualMachine.Builder;
 using VirtualMachine.Example.Register;
 using VirtualMachine.Example.Stack;
+using VirtualMachine.iLang.Checker;
 using VirtualMachine.iLang.Extras;
 using VirtualMachine.Processor;
 using VirtualMachine.TypeDefs.Processor;
@@ -81,7 +82,17 @@ if (!modes.Contains(mode))
     return;
 }
 
-Parsers.ParseCompilationUnit(code, out CompilationUnit function);
+if(!Parsers.ParseCompilationUnit(code, out CompilationUnit function))
+{
+    Console.WriteLine("Parsing failed");
+    return;
+}
+
+if(!TypeChecker.Check(function))
+{
+    Console.WriteLine("Type checking failed");
+    return;
+}
 
 if(mode == "p") {
     Console.WriteLine(function);

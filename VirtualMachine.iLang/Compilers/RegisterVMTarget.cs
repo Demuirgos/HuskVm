@@ -74,15 +74,15 @@ namespace iLang.Compilers.RegisterTarget
 
         private static void CompileIdentifier(Identifier identifier, Context<Registers> context, FunctionContext functionContext)
         {
-            if (context.Variables.ContainsKey(identifier.Value))
+            if (context.Variables.ContainsKey(identifier.FullName))
             {
                 context.Bytecode.Add(Mov, cjo, 0);
-                context.Bytecode.Add(Mov, mof, context.Variables[identifier.Value]);
+                context.Bytecode.Add(Mov, mof, context.Variables[identifier.FullName]);
                 context.Bytecode.Add(Load, eax, mof, cjo);
             }
             else
             {
-                throw new Exception($"Variable {identifier.Value} not found");
+                throw new Exception($"Variable {identifier.FullName} not found");
             }
         }
 
@@ -265,28 +265,28 @@ namespace iLang.Compilers.RegisterTarget
 
         private static void CompileVarDeclaration(VarDeclaration varDeclaration, Context<Registers> context, FunctionContext functionContext)
         {
-            if(context.Variables.ContainsKey(varDeclaration.Name.Value))
+            if(context.Variables.ContainsKey(varDeclaration.Name.FullName))
             {
                 throw new Exception($"Variable {varDeclaration.Name} already declared");
             }
 
-            context.Variables[varDeclaration.Name.Value] = context.Variables.Count;
+            context.Variables[varDeclaration.Name.FullName] = context.Variables.Count;
 
             CompileExpression(varDeclaration.Value, context, functionContext);
-            context.Bytecode.Add(Mov, mof, context.Variables[varDeclaration.Name.Value]);
+            context.Bytecode.Add(Mov, mof, context.Variables[varDeclaration.Name.FullName]);
             context.Bytecode.Add(Mov, cjo, 0);
             context.Bytecode.Add(Store, eax, mof, cjo);
         }
 
         private static void CompileAssignment(Assignment assignment, Context<Registers> context, FunctionContext functionContext)
         {
-            if (!context.Variables.ContainsKey(assignment.Name.Value))
+            if (!context.Variables.ContainsKey(assignment.Name.FullName))
             {
                 throw new Exception($"Variable {assignment.Name} not found");
             }
 
             CompileExpression(assignment.Value, context, functionContext);
-            context.Bytecode.Add(Mov, mof, context.Variables[assignment.Name.Value]);
+            context.Bytecode.Add(Mov, mof, context.Variables[assignment.Name.FullName]);
             context.Bytecode.Add(Mov, cjo, 0);
             context.Bytecode.Add(Store, eax, mof, cjo);
         }
@@ -339,7 +339,7 @@ namespace iLang.Compilers.RegisterTarget
             string mangledName = Tools.Mangle(@namespace, function.Name);
             if (functionContext.Functions.ContainsKey(mangledName))
             {
-                throw new Exception($"Function {function.Name.Value} already defined");
+                throw new Exception($"Function {function.Name.FullName} already defined");
             }
 
             var localContext = new Context<Registers>(mangledName);
@@ -347,7 +347,7 @@ namespace iLang.Compilers.RegisterTarget
             var functionArgs = function.Args.Items.ToArray();
             for (int i = 0; i < functionArgs.Length; i++)
             {
-                localContext.Variables[functionArgs[i].Value] = i;
+                localContext.Variables[functionArgs[i].Name.FullName] = i;
             }
 
             switch (function.Body)
