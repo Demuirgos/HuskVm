@@ -3,6 +3,7 @@ using iLang.SyntaxDefinitions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using VirtualMachine.iLang.Checker;
@@ -40,17 +41,18 @@ namespace iLang.Parsers
                     return true;
                 }
             }
-            index = start;
-            return false;
+
+            return Fail(code, ref index, start);
         }
         private static bool Fail(string code, ref int index, int start)
         {
             index = start;
             return false;
         }
-        private static bool ParseIdentifier(string code, ref int index, out Atom? identifier)
+
+        public static bool ParseName(string code, ref int index, out Name? name)
         {
-            bool ParseSubIdentifier(string code, ref int index, out string? identifier)
+            bool ParseSubName(string code, ref int index, out string? identifier)
             {
                 identifier = null;
                 var start = index;
@@ -64,29 +66,69 @@ namespace iLang.Parsers
                 return true;
             }
 
-            identifier = null;
+            name = null;
             var start = index;
-            
+
             // parse name1.name2.name3
             string namespaceName = string.Empty;
-            List<string> subIdentifiers = new();
-
-            var token = string.Empty;
-            do
+            if (!ParseSubName(code, ref index, out string? subIdentifier)) return Fail(code, ref index, start);
+            if(PeekToken(code, ref index, ["::"]))
             {
-                if (!ParseSubIdentifier(code, ref index, out string? subIdentifier)) 
-                    return Fail(code, ref index, start);
+                namespaceName = subIdentifier;
+                index+= 2;
+                if(!ParseSubName(code, ref index, out subIdentifier)) return Fail(code, ref index, start);
+            } 
 
-                if(PeekToken(code, ref index, ["::"]))
+            name = new Name(namespaceName, subIdentifier);
+            return true;
+        }
+
+        private static bool ParseIdentifier(string code, ref int index, out Atom? identifier)
+        {
+            bool ParseSubIdentifier(string code, ref int index, out Identifier? identifier)
+            {
+                identifier = null;
+                var start = index;
+
+                if(ParseName(code, ref index, out Name? name))
                 {
-                    namespaceName = subIdentifier;
-                } else
+                    identifier = name;
+                    return true;
+                } else if(ParseIndexer(code, ref index, out Indexer? indexer))
                 {
-                    subIdentifiers.Add(subIdentifier);
+                    identifier = indexer;
+                    return true;
                 }
-            } while (ParseToken(code, ref index, [".", "::"], out token));
+                else
+                {
+                     return Fail(code, ref index, start);
+                }
+            }
 
-            identifier = new Identifier(namespaceName, subIdentifiers.ToArray());
+            var start = index;
+            identifier = null;
+            if (!ParseName(code, ref index, out Name? name))
+            {
+                return Fail(code, ref index, start);
+            }
+
+            List<Identifier> identifiers = new();
+            identifiers.Add(name);
+
+            while (index < code.Length && ParseSubIdentifier(code, ref index, out Identifier? subIdentifier))
+            {
+                identifiers.Add(subIdentifier);
+            }
+
+            if (identifiers.Count == 1)
+            {
+                identifier = identifiers[0];
+            }
+            else
+            {
+                identifier = new Composed(identifiers.ToArray());
+            }
+
             return true;
         }
 
@@ -165,8 +207,8 @@ namespace iLang.Parsers
             int start = index;
             if (!ParseIdentifier(code, ref index, out Atom? identifier)) return Fail(code, ref index, start);
             if (!ParseToken(code, ref index, [":"], out _)) return Fail(code, ref index, start);
-            if (!ParserType(code, ref index, out SyntaxDefinitions.Type? type)) return Fail(code, ref index, start);
-            arg = new Argument((Identifier)identifier, type);
+            if (!ParseType(code, ref index, out SyntaxDefinitions.TypeNode? type)) return Fail(code, ref index, start);
+            arg = new Argument((Name)identifier, type);
             return true;
         }
 
@@ -194,7 +236,7 @@ namespace iLang.Parsers
             return true;
         }
 
-        private static bool ParseUnaryOperation(string code, ref int index, out UnaryOp? unaryOp)
+        private static bool ParseUnaryOperation(string code, ref int index, out UnaryOperation? unaryOp)
         {
             unaryOp = null;
             Expression? atom = null;
@@ -214,7 +256,7 @@ namespace iLang.Parsers
 
             if (ParseExpression(code, ref index, out atom, excludeBinary: true))
             {
-                unaryOp = new UnaryOp(op, atom);
+                unaryOp = new UnaryOperation(op, atom);
                 return true;
             }
             return Fail(code, ref index, start);
@@ -243,7 +285,19 @@ namespace iLang.Parsers
             return Fail(code, ref index, start);
         }
 
-        private static bool ParseBinaryOperation(string code, ref int index, out BinaryOp? binaryOp)
+        private static bool ParseNull(string code, ref int index, out Atom? nullexpr)
+        {
+            nullexpr = null;
+            int start = index;
+            if (ParseToken(code, ref index, ["null"], out string? token))
+            {
+                nullexpr = new Null(token);
+                return true;
+            }
+            return Fail(code, ref index, start);
+        }
+
+        private static bool ParseBinaryOperation(string code, ref int index, out BinaryOperation? binaryOp)
         {
             binaryOp = null;
             Operation op = null;
@@ -266,7 +320,7 @@ namespace iLang.Parsers
             {
                 return Fail(code, ref index, start);
             }
-            binaryOp = new BinaryOp(leftAtom, op, rightAtom);
+            binaryOp = new BinaryOperation(leftAtom, op, rightAtom);
             return true;
         }
         private static bool ParseParameters(string code, ref int index, out Expression[]? argsList)
@@ -307,7 +361,7 @@ namespace iLang.Parsers
             return true;
         }
 
-        private static bool ParseCall(string code, ref int index, out CallExpr? call)
+        private static bool ParseCall(string code, ref int index, out CallExpression? call)
         {
 
             int start = index;
@@ -316,16 +370,31 @@ namespace iLang.Parsers
             if (!ParseIdentifier(code, ref index, out Atom? identifier)) return Fail(code, ref index, start);
             if (!ParseParameters(code, ref index, out Expression[]? argsList)) return Fail(code, ref index, start);
 
-            call = new CallExpr((Identifier)identifier, new ParameterList(argsList));
+            call = new CallExpression((Name)identifier, new ParameterList(argsList));
             return true;
         }
 
         private static bool ParseExpression(string code, ref int index, out Expression? expression, bool excludeBinary = false)
         {
             expression = null;
-            if (!excludeBinary && ParseBinaryOperation(code, ref index, out BinaryOp? binaryOp))
+            if (!excludeBinary && ParseBinaryOperation(code, ref index, out BinaryOperation? binaryOp))
             {
                 expression = binaryOp;
+                return true;
+            }
+            else if(ParseRecordValue(code, ref index, out RecordExpression? record))
+            {
+                expression = record;
+                return true;
+            }
+            else if (ParseArrayExpr(code, ref index, out ArrayExpression? array))
+            {
+                expression = array;
+                return true;
+            }
+            else if (ParseNull(code, ref index, out Atom? nullexpr))
+            {
+                expression = nullexpr;
                 return true;
             }
             else if (ParseParenthesis(code, ref index, out ParenthesisExpr? parenthesis))
@@ -333,12 +402,12 @@ namespace iLang.Parsers
                 expression = parenthesis;
                 return true;
             }
-            else if (ParseCall(code, ref index, out CallExpr? call))
+            else if (ParseCall(code, ref index, out CallExpression? call))
             {
                 expression = call;
                 return true;
             }
-            else if (ParseUnaryOperation(code, ref index, out UnaryOp? unaryOp))
+            else if (ParseUnaryOperation(code, ref index, out UnaryOperation? unaryOp))
             {
                 expression = unaryOp;
                 return true;
@@ -351,29 +420,87 @@ namespace iLang.Parsers
             return false;
         }
 
+        private static bool ParseIndexer(string code, ref int index, out Indexer? indexer)
+        {
+            indexer = null;
+            int start = index;
+            if (!ParseToken(code, ref index, ["["], out _)) return Fail(code, ref index, start);
+            if (!ParseExpression(code, ref index, out Expression? indexExpr)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, ["]"], out _)) return Fail(code, ref index, start);
+            indexer = new Indexer(indexExpr);
+            return true;
+        }
+
+        private static bool ParseRecordValue(string code, ref int index, out RecordExpression? record)
+        {
+            record = null;
+            int start = index;
+            if (!ParseToken(code, ref index, ["new"], out _)) return Fail(code, ref index, start);
+            if (!ParseType(code, ref index, out SyntaxDefinitions.TypeNode? type)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, ["|"], out _)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, ["{"], out _)) return Fail(code, ref index, start);
+            Dictionary<string, Expression> fields = new();
+            while (index < code.Length && code[index] != '}')
+            {
+                if (!ParseIdentifier(code, ref index, out Atom? identifier)) return Fail(code, ref index, start);
+                if (!ParseToken(code, ref index, ["="], out _)) return Fail(code, ref index, start);
+                if (!ParseExpression(code, ref index, out Expression? expression)) return Fail(code, ref index, start);
+                fields.Add(((Name)identifier).FullName, expression);
+                if (!ParseToken(code, ref index, [",", "}"], out string? token)) return Fail(code, ref index, start);
+                if (token == "}") break;
+            }
+            if (!ParseToken(code, ref index, ["}"], out _)) return Fail(code, ref index, start);
+            record = new RecordExpression(type, fields);
+            return true;
+        }
+
         private static bool ParseVariableDeclaration(string code, ref int index, out VarDeclaration? varDeclaration)
         {
             varDeclaration = null;
             int start = index;
-            if (!ParseToken(code, ref index, ["let"], out _)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, ["letlocal", "letglobal", "let"], out var token)) return Fail(code, ref index, start);
             if (!ParseIdentifier(code, ref index, out Atom? identifier)) return Fail(code, ref index, start);
             if (!ParseToken(code, ref index, [":"], out _)) return Fail(code, ref index, start);
-            if (!ParserType(code, ref index, out SyntaxDefinitions.Type? type)) return Fail(code, ref index, start);
+            if (!ParseType(code, ref index, out SyntaxDefinitions.TypeNode? type))
+            {
+                type = null;
+            }
             if (!ParseToken(code, ref index, ["="], out _)) return Fail(code, ref index, start);
             if (!ParseExpression(code, ref index, out Expression? expression)) return Fail(code, ref index, start);
             if (!ParseToken(code, ref index, [";"], out _)) return Fail(code, ref index, start);
-            varDeclaration = new VarDeclaration((Identifier)identifier, type, expression);
+            varDeclaration = new VarDeclaration((Name)identifier, type, token == "letglobal", expression);
             return true;
         }
 
-        private static bool ParserType(string code, ref int index, out SyntaxDefinitions.Type? type)
+        private static bool ParseType(string code, ref int index, out SyntaxDefinitions.TypeNode? type)
         {
-            if(!ParseIdentifier(code, ref index, out Atom? identifier))
+            ArrayTypeNode ConstructArrayNode(Name Name, Indexer[] dimentions)
             {
-                type = null;
-                return false;
+                if(dimentions.Length == 1)
+                {
+                    return new ArrayTypeNode(new SyntaxDefinitions.TypeNode(Name), dimentions[0].Index as Number);
+                }
+                else
+                {
+                    return new ArrayTypeNode(ConstructArrayNode(Name, dimentions[1..]), dimentions[0].Index as Number);
+                }
             }
-            type = new SyntaxDefinitions.Type(((Identifier)identifier).FullName);
+
+            int start = index;
+            type = null;
+
+            if (!ParseIdentifier(code, ref index, out Atom? identifier))
+            {
+                return Fail(code, ref index, start);    
+            }
+
+            if(identifier is Name name)
+            {
+                type = new SyntaxDefinitions.TypeNode(name);
+            } else if(identifier is Composed composed)
+            {
+                type = ConstructArrayNode(composed.Root, composed.Values.OfType<Indexer>().ToArray());
+            }
             return true;
         }
 
@@ -402,7 +529,7 @@ namespace iLang.Parsers
                 if (!ParseString(code, ref index, out String path)) return Fail(code, ref index, start);
                 if (!ParseToken(code, ref index, ["as"], out _)) return Fail(code, ref index, start);
                 if (!ParseIdentifier(code, ref index, out Atom alias)) return Fail(code, ref index, start);
-                paths.Add(new FilePath(path.Value, ((Identifier)alias).FullName));
+                paths.Add(new FilePath(path.Value, ((Name)alias).FullName));
                 if (!ParseToken(code, ref index, [",", "]"], out string? token)) return Fail(code, ref index, start);
                 if (token == "]") break;
             }
@@ -472,35 +599,36 @@ namespace iLang.Parsers
             return true;
         }
 
-        public static bool ParseFunction(string code, ref int index, out FunctionDef function)
+        public static bool ParseFunction(string code, ref int index, out FunctionDefinition function)
         {
-
+            int start = index;
             function = null;
             if (!ParseIdentifier(code, ref index, out Atom? identifier))
             {
-                return false;
+                Fail(code, ref index, start);
             }
 
             if (!ParseToken(code, ref index, [":"], out _)) return false;
 
             ArgumentList? argsList;
-            SyntaxDefinitions.Type? returnType = SyntaxDefinitions.Type.Any;
-            if (identifier is Identifier identifier1 && identifier1.FullName.ToLower() != "main")
+            TypeNode? returnType = null;
+            bool returnTypeNotFound = false;
+            if (identifier is Name identifier1 && identifier1.FullName.ToLower() != "main")
             {
 
                 if (!ParseArgumentList(code, ref index, out argsList))
                 {
-                    return false;
+                    return Fail(code, ref index, start);
                 }
 
                 if (!ParseToken(code, ref index, ["=>"], out _))
                 {
-                    return false;
+                    return Fail(code, ref index, start);
                 }
 
-                if(!ParserType(code, ref index, out returnType))
+                if(!ParseType(code, ref index, out returnType))
                 {
-                    returnType = SyntaxDefinitions.Type.Any; 
+                    returnTypeNotFound = true;
                 }
             }
             else
@@ -510,72 +638,125 @@ namespace iLang.Parsers
 
             Block block = null;
             Expression expression = null;
-            if (!ParseBlock(code, ref index, out block) && !ParseExpression(code, ref index, out expression))
+
+            // if returnTypeNotFound we can only have an expression
+            // otherwise we can have a block or an expression
+
+            if(returnTypeNotFound && !ParseExpression(code, ref index, out expression))
             {
-                return false;
+                return Fail(code, ref index, start);
+            } else
+            {
+                if (!ParseBlock(code, ref index, out block) && !ParseExpression(code, ref index, out expression))
+                {
+                    return Fail(code, ref index, start);
+                }
             }
-            if (!ParseToken(code, ref index, [";"], out _)) return false;
-            function = new FunctionDef((Identifier)identifier, returnType, argsList, ((SyntaxTree)block) ?? ((SyntaxTree)expression));
+
+            if (!ParseToken(code, ref index, [";"], out _)) return Fail(code, ref index, start);
+            function = new FunctionDefinition((Name)identifier, returnType, argsList, ((SyntaxTree)block) ?? ((SyntaxTree)expression));
             return true;
         }
 
-        private static bool ParseFieldDef(string code, ref int index, out FieldDef fieldDef)
+        private static bool ParseArrayExpr(string code, ref int index, out ArrayExpression arrayExpr)
         {
+            var start = index;
+            arrayExpr = null;
+            if (!ParseToken(code, ref index, ["new"], out _)) return Fail(code, ref index, start);
+            if(!ParseType(code, ref index, out SyntaxDefinitions.TypeNode? type))
+            {
+                return Fail(code, ref index, start);
+            }
+            if (!ParseToken(code, ref index, ["|"], out _)) return Fail(code, ref index, start);
+            if (!ParseToken(code, ref index, ["["], out _))
+            {
+                return Fail(code, ref index, start);
+            }
+
+            List<Expression> items = new();
+            while (index < code.Length && code[index] != ']')
+            {
+                if (!ParseExpression(code, ref index, out Expression? expression))
+                {
+                    return Fail(code, ref index, start);
+                }
+                items.Add(expression);
+                if (!ParseToken(code, ref index, [",", "]"], out string? token))
+                {
+                    return Fail(code, ref index, start);
+                }
+                if (token == "]") break;
+            }
+
+
+            arrayExpr = new ArrayExpression(type, items.ToArray());
+            return true;
+        }
+
+        private static bool ParseFieldDef(string code, ref int index, out FieldDefinition fieldDef)
+        {
+            int start = index;
             fieldDef = null;
             if (!ParseIdentifier(code, ref index, out Atom? identifier))
             {
-                return false;
+                return Fail(code, ref index, start);
             }
             if (!ParseToken(code, ref index, [":"], out _))
             {
-                return false;
+                return Fail(code, ref index, start);
             }
-            if (!ParserType(code, ref index, out SyntaxDefinitions.Type? type))
+            if (!ParseType(code, ref index, out SyntaxDefinitions.TypeNode? type))
             {
-                return false;
+                return Fail(code, ref index, start);
             }
-            if (!ParseToken(code, ref index, [";"], out _))
+            if (!ParseToken(code, ref index, [","], out _))
             {
-                return false;
+                return Fail(code, ref index, start);
             }
-            fieldDef = new FieldDef(((Identifier)identifier).FullName, type);
+            fieldDef = new FieldDefinition(((Name)identifier).FullName, type);
             return true;
         }
 
-        private static bool ParseTypeDef(string code, ref int index, out TypeDef typeDef)
+        private static bool ParseTypeDef(string code, ref int index, out TypeDefinition typeDef)
         {
+            int start = index;
             typeDef = null;
 
-            if (!ParseToken(code, ref index, ["type"], out _))
+            if (!ParseToken(code, ref index, ["typedef"], out _))
             {
-                return false;
+                return Fail(code, ref index, start);
             }
             
             if (!ParseIdentifier(code, ref index, out Atom? identifier))
             {
-                return false;
+                return Fail(code, ref index, start);
+            }
+
+            if(!ParseToken(code, ref index, [":="], out _))
+            {
+                return Fail(code, ref index, start);
             }
 
             if (!ParseToken(code, ref index, ["{"], out _))
             {
-                return false;
+                return Fail(code, ref index, start);
             }
 
-            List<FieldDef> fields = new();
+            List<FieldDefinition> fields = new();
             while (index < code.Length && code[index] != '}')
             {
-                if (!ParseFieldDef(code, ref index, out FieldDef fieldDef))
+                if (!ParseFieldDef(code, ref index, out FieldDefinition fieldDef))
                 {
-                    return false;
+                    return Fail(code, ref index, start);
                 }
                 fields.Add(fieldDef);
             }
 
             if (!ParseToken(code, ref index, ["}"], out _))
             {
-                return false;
+                return Fail(code, ref index, start);
             }
-            typeDef = new TypeDef(((Identifier)identifier).FullName, fields.ToArray());
+            typeDef = new TypeDefinition(((Name)identifier).FullName, fields.ToArray());
             return true;
         }
 
@@ -603,31 +784,66 @@ namespace iLang.Parsers
             int index = 0;
             compilationUnit = null;
 
-            Dictionary<string, CompilationUnit> libraries = new();
-            if (ParseIncludeRegion(code, ref index, out IncludeFile includeFiles))
+            Dictionary<string, CompilationUnit> Funclibraries = new();
+            Dictionary<string, CompilationUnit> Typelibraries = new();
+
+
+            if (ParseIncludeRegion(code, ref index, out IncludeFile includeFiles) && includeFiles.Paths.Length > 0)
             {
-                if (!HandleIncludes(includeFiles, out libraries))
+                var groups = includeFiles.Paths.GroupBy(x => x.Path.EndsWith(".ilt")).ToList();
+                if (groups.Count < 1 || !HandleFuncIncludes(new IncludeFile(groups[0].ToArray()), out Funclibraries))
+                {
+                    return false;
+                }
+
+                if (groups.Count < 2 || !HandleTypeIncludes(new IncludeFile(groups[1].ToArray()), out Typelibraries))
                 {
                     return false;
                 }
             }
 
             
-            List<FunctionDef> body = new();
+            List<SyntaxTree> body = new();
+            FunctionDefinition? function = null;
+            TypeDefinition? typedef = null;
             while (index < code.Length)
             {
-                if (!ParseFunction(code, ref index, out FunctionDef? function))
+                if (ParseFunction(code, ref index, out function) || ParseTypeDef(code, ref index, out typedef))
                 {
-                    return false;
+                    if (function is not null && (body.Count == 0 || body.First() is FunctionDefinition))
+                    {
+                        body.Add(function);
+                        continue;
+                    }
+                    else if (typedef is not null && (body.Count == 0 || body.First() is TypeDefinition))
+                    {
+                        body.Add(typedef);
+                        continue;
+                    }
                 }
-                body.Add(function);
+                return false;
             }
-            compilationUnit = new CompilationUnit(libraries, [.. body]);
+            compilationUnit = new CompilationUnit(Typelibraries, Funclibraries, [.. body]);
 
             return true;
         }
 
-        private static bool HandleIncludes(IncludeFile includeFiles, out Dictionary<string, CompilationUnit> compilationUnits)
+        private static bool HandleTypeIncludes(IncludeFile includeFile, out Dictionary<string, CompilationUnit> typelibraries)
+        {
+            typelibraries = new();
+            foreach (var file in includeFile.Paths)
+            {
+                string code = System.IO.File.ReadAllText(file.Path);
+                if (!ParseCompilationUnit(code, out var typeDef))
+                {
+                    return false;
+                }
+                typelibraries.Add(file.Alias, typeDef);
+            }
+            return true;
+        }
+
+        private static bool HandleFuncIncludes(IncludeFile includeFiles, out Dictionary<string, CompilationUnit> compilationUnits)
         {
             compilationUnits = new();
             foreach (var file in includeFiles.Paths)

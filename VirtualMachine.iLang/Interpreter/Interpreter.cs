@@ -8,6 +8,7 @@ using iLang.Parsers;
 using System.Numerics;
 using VirtualMachine.Processor;
 using VirtualMachine.iLang.Extras;
+using System.Xml.Linq;
 
 namespace iLang.Interpreter
 {
@@ -25,7 +26,15 @@ namespace iLang.Interpreter
     {
         public override string ToString() => (this.Value ? 1 : 0).ToString();
     }
+    internal record Record(Dictionary<string, Value> Fields) : Value
+    {
+        public override string ToString() => $"{{{string.Join(", ", Fields.Select(x => $"{x.Key}: {x.Value}"))}}}";
+    }
 
+    internal record Array(Value[] Items) : Value
+    {
+        public override string ToString() => $"[{string.Join(", ", Items.Select(i => i.ToString()))}]";
+    }
 
 
     internal class Context(string namespaceName)
@@ -36,22 +45,22 @@ namespace iLang.Interpreter
 
     internal class FunctionsContext
     {
-        public void AddFunction(FunctionDef function)
+        public void AddFunction(FunctionDefinition function)
         {
-            Functions[function.Name.LocalName] = function;
+            Functions[function.Name.FullName] = function;
         }
 
         public void AddFunctions(CompilationUnit compilationUnit)
         {
-            foreach(var function in compilationUnit.Body)
+            foreach(var function in compilationUnit.Body.Where(f => f is FunctionDefinition))
             {
-                AddFunction(function);
+                AddFunction(function as FunctionDefinition);
             }
         }
 
-        public Dictionary<string, FunctionDef> Functions { get; set; } = new Dictionary<string, FunctionDef>();
+        public Dictionary<string, FunctionDefinition> Functions { get; set; } = new Dictionary<string, FunctionDefinition>();
         
-        public FunctionDef this[string key]
+        public FunctionDefinition this[string key]
         {
             get => Functions[key];
             set => Functions[key] = value;
@@ -79,7 +88,7 @@ namespace iLang.Interpreter
             mainContext.AddFunctions(compilation);
             context.Libraries[string.Empty] = mainContext;
 
-            foreach (var library in compilation.inludes)
+            foreach (var library in compilation.FuncInludes)
             {
                 var libraryContext = new FunctionsContext();
                 libraryContext.AddFunctions(library.Value);
@@ -92,14 +101,14 @@ namespace iLang.Interpreter
             return result;
         }
 
-        private static Value InterpretFunctionCall(string namespaceName, FunctionDef functionDef, Value[] arguments, GlobalContext context)
+        private static Value InterpretFunctionCall(string namespaceName, FunctionDefinition functionDef, Value[] arguments, GlobalContext context)
         {
             var newContext = new Context(namespaceName);
             context.ContextStack.Push(newContext);
 
             for (int i = 0; i < arguments.Length; i++)
             {
-                newContext.Variables[functionDef.Args.Items[i].Name.LocalName] = arguments[i];
+                newContext.Variables[functionDef.Args.Items[i].Name.FullName] = arguments[i];
                 
             }
 
@@ -118,24 +127,65 @@ namespace iLang.Interpreter
         {
             foreach(var statement in body.Items)
             {
-                switch(statement)
+                switch (statement)
                 {
                     case VarDeclaration varDeclaration:
-                        context.ContextStack.Peek().Variables[varDeclaration.Name.FullName] = InterpretExpression(varDeclaration.Value, context);
+                        if (varDeclaration.IsGlobal)
+                        {
+                            context.GlobalVariables[varDeclaration.Name.FullName] = InterpretExpression(varDeclaration.Value, context);
+                        }
+                        else
+                        {
+                            context.ContextStack.Peek().Variables[varDeclaration.Name.FullName] = InterpretExpression(varDeclaration.Value, context);
+                        }
                         break;
                     case ReturnStatement returnStatement:
                         return InterpretExpression(returnStatement.Value, context);
-                    case Assignment assignment:
-                        context.ContextStack.Peek().Variables[assignment.Name.FullName] = InterpretExpression(assignment.Value, context);
+                    case Assignment assignment when assignment.Name is Name:
+                        var target1 = assignment.Name as Name;
+                        if (context.ContextStack.Peek().Variables.ContainsKey(target1.FullName))
+                        {
+                            context.ContextStack.Peek().Variables[target1.FullName] = InterpretExpression(assignment.Value, context);
+                        } else if (context.GlobalVariables.ContainsKey(target1.FullName))
+                        {
+                            context.GlobalVariables[target1.FullName] = InterpretExpression(assignment.Value, context);
+                        }
+                        else
+                        {
+                            throw new Exception("Variable not found");
+                        }
+                        break;
+                    case Assignment assignment when assignment.Name is Composed:
+                        var target2 = assignment.Name as Composed;
+                        if (context.ContextStack.Peek().Variables.ContainsKey(target2.Root.FullName))
+                        {
+                            HandleIdentifier(target2, context, InterpretExpression(assignment.Value, context));
+                        }
+                        else if (context.GlobalVariables.ContainsKey(target2.Root.FullName))
+                        {
+                            HandleIdentifier(target2, context, InterpretExpression(assignment.Value, context));
+                        }
+                        else
+                        {
+                            throw new Exception("Variable not found");
+                        }
                         break;
                     case IfStatement ifStatement:
                         if(InterpretExpression(ifStatement.Condition, context) is Boolean condition1 && condition1.Value is true)
                         {
-                            return InterpretBlock(ifStatement.True, context);
+                            var blockValue = InterpretBlock(ifStatement.True, context);
+                            if(blockValue is not Nil)
+                            {
+                                return blockValue;
+                            }
                         }
                         else
                         {
-                            return InterpretBlock(ifStatement.False, context);
+                            var blockValue = InterpretBlock(ifStatement.False, context);
+                            if (blockValue is not Nil)
+                            {
+                                return blockValue;
+                            }
                         }
                         break;
                     case WhileStatement whileStatement:
@@ -165,24 +215,115 @@ namespace iLang.Interpreter
                 case SyntaxDefinitions.Boolean boolean:
                     return new Boolean(boolean.Value);
                 case Identifier identifier:
-                    return context.ContextStack.Peek().Variables[identifier.FullName];
-                case BinaryOp binaryOp:
+                    return HandleIdentifier(identifier, context);
+                case Null nullexpr:
+                    return Nil.Instance;
+                case BinaryOperation binaryOp:
                     return InterpretBinaryOp(binaryOp, context);
-                case UnaryOp unaryOp:
+                case UnaryOperation unaryOp:
                     return InterpretUnary(unaryOp, context);
-                case CallExpr callExpr:
+                case CallExpression callExpr:
                     var args = callExpr.Args.Items.Select(x => InterpretExpression(x, context)).ToArray();
-                    var containingNamespace = callExpr.Function.@namespace;
-                    var func = context.Libraries[containingNamespace][callExpr.Function.LocalName];
+                    var containingNamespace = callExpr.Function.Namespace;
+                    var func = context.Libraries[containingNamespace][callExpr.Function.Value];
                     return InterpretFunctionCall(containingNamespace, func, args, context);
                 case ParenthesisExpr parentheses:
                     return InterpretExpression(parentheses.Body, context);
+                case RecordExpression recordExpr:
+                    var fields = recordExpr.Fields.ToDictionary(x => x.Key, x => InterpretExpression(x.Value, context));
+                    return new Record(fields);
+                case ArrayExpression arrayExpr:
+                    var items = arrayExpr.Items.Select(x => InterpretExpression(x, context)).ToArray();
+                    return new Array(items);
                 default:
                     throw new Exception($"Invalid expression : {value}");
             }
         }
 
-        private static Value InterpretUnary(UnaryOp unaryOp, GlobalContext context)
+        private static Value HandleIdentifier(Identifier identifier, GlobalContext context, Value newValue = null)
+        {
+            Value ResolveSubIdentifier(Value value, out Value returnedValue, params Identifier[] identifiers)
+            {
+                if (identifiers.Length == 0)
+                {
+                    returnedValue = value;
+                    return value;
+                }
+                switch (identifiers[0])
+                {
+                    case Name name:
+                        if (value is Record record1 && record1.Fields.ContainsKey(name.FullName))
+                        {
+                            if(newValue is not null && identifiers.Length == 1)
+                            {
+                                record1.Fields[name.FullName] = newValue;
+                            }
+                            returnedValue = ResolveSubIdentifier(record1.Fields[name.FullName], out returnedValue, identifiers.Skip(1).ToArray());
+                            return record1;
+                        }
+                        throw new Exception("Invalid identifier");
+                    case Indexer indexer:
+                        if (InterpretExpression(indexer.Index, context) is Decimal index && index.Value % 1 == 0)
+                        {
+                            if (value is Array array)
+                            {
+                                if (index.Value >= 0 && index.Value < array.Items.Length)
+                                {
+                                    if (newValue is not null && identifiers.Length == 1)
+                                    {
+                                        array.Items[(int)index.Value] = newValue;
+                                    }
+                                    returnedValue = ResolveSubIdentifier(array.Items[(int)index.Value], out returnedValue, identifiers.Skip(1).ToArray());
+                                    return array;
+                                }
+                                throw new Exception("Invalid index");
+                            }
+                        }
+                        throw new Exception("Invalid index");
+                    default:
+                        throw new Exception("Invalid identifier");
+                }
+            }
+            switch (identifier)
+            {
+                case Name name:
+                    var root1 = name.FullName;
+                    if (context.GlobalVariables.ContainsKey(root1))
+                    {
+                        if(newValue is not null)
+                        {
+                            context.GlobalVariables[root1] = newValue;
+                        }
+                        return ResolveSubIdentifier(context.GlobalVariables[root1], out _, []);
+                    }
+                    else if (context.ContextStack.Peek().Variables.ContainsKey(root1))
+                    {
+                        if (newValue is not null)
+                        {
+                            context.ContextStack.Peek().Variables[root1] = newValue;
+                        }
+                        return ResolveSubIdentifier(context.ContextStack.Peek().Variables[root1], out _, []);
+                    }
+                    else throw new Exception("Variable not found");
+                case Composed composed:
+                    var root2 = composed.Root.FullName;
+                    if (context.GlobalVariables.ContainsKey(root2))
+                    {
+                        _ = ResolveSubIdentifier(context.GlobalVariables[root2], out Value value, composed.Values.Skip(1).ToArray());
+                        return value;
+                    }
+                    else if (context.ContextStack.Peek().Variables.ContainsKey(root2))
+                    {
+                        _ = ResolveSubIdentifier(context.ContextStack.Peek().Variables[root2], out Value value,  composed.Values.Skip(1).ToArray());
+                        return value;
+                    }
+                    else throw new Exception("Variable not found");
+                default:
+                    throw new Exception("Invalid identifier");
+            }
+        }
+
+        private static Value InterpretUnary(UnaryOperation unaryOp, GlobalContext context)
         {
             var right = InterpretExpression(unaryOp.Right, context);
 
@@ -199,7 +340,7 @@ namespace iLang.Interpreter
             }
         }
 
-        private static Value InterpretBinaryOp(BinaryOp binaryOp, GlobalContext context)
+        private static Value InterpretBinaryOp(BinaryOperation binaryOp, GlobalContext context)
         {
             var left = InterpretExpression(binaryOp.Left, context);
             var right = InterpretExpression(binaryOp.Right, context);

@@ -8,10 +8,23 @@ using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
 using VirtualMachine.Example.Register;
+using VirtualMachine.Example.Stack;
 using VirtualMachine.Instruction;
 
 namespace VirtualMachine.iLang.Compilers
 {
+    abstract class FunctionContext<T>() : Context<T>(System.String.Empty)
+    {
+        public string CurrentNamespace { get; set; } = System.String.Empty;
+        public Dictionary<string, Bytecode<T>> Functions { get; } = new();
+        public Dictionary<string, int> GlobalVariables { get; } = new();
+        public Bytecode<T> MachineCode { get; } = new(new List<Opcode<T>>());
+
+        public HashSet<string> Called { get; } = new();
+
+        public abstract byte[] Collapse();
+
+    }
     class Opcode<T>(Instruction<T> instruction, Operand[] Operands)
     {
         public override string ToString() => $"{instruction.Name} {System.String.Join(" ", Operands.Select(x => x.ToString()))}";
@@ -95,8 +108,8 @@ namespace VirtualMachine.iLang.Compilers
     {
         public static string Mangle(string nameSpace, Identifier name)
         {
-            if(System.String.IsNullOrEmpty(nameSpace)) return name.LocalName;
-            return name.FullName;
+            if(System.String.IsNullOrEmpty(nameSpace)) return "asdasdasdasd";
+            return "adasdasd";
         }
 
         public static int AbsoluteValue(int value) => value < 0 ? -value : value;

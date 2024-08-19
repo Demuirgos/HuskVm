@@ -1,0 +1,10 @@
+typedef Result := {
+	IsOk: Logic,
+	Value: Logic[3],
+	Err: Number,
+}
+
+typedef Option := {
+	IsSome: Logic,
+	Some: Number,
+}

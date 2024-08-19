@@ -55,12 +55,12 @@ Fibonacci : [a:Number] => Number {
 };
 
 IsPrime : [n:Number] => Logic {
-    if (n < 3) then {
-        return false;
+    if (n < 5) then {
+        return (n = 2) | (n = 3);
     } else {
         let i : Number = 2;
         if ((n % 2) = 0) then {
-			return n = 2;
+			return false;
 		} else {
             i <- 3;
             while ((i * i) < n) do {

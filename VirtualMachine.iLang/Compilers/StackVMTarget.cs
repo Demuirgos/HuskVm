@@ -9,23 +9,22 @@ namespace iLang.Compilers.StacksCompiler
 {
     public static class Compiler
     {
-        private class FunctionContext() : Context<Stacks>(String.Empty)
+        class GlobalContext : FunctionContext<Stacks>
         {
-            public string CurrentNamespace { get; set; } = System.String.Empty;
-            public Dictionary<string, Bytecode<Stacks>> Functions { get; } = new();
-            public Bytecode<Stacks> MachineCode { get; } = new(new List<Opcode<Stacks>>());
+            public override byte[] Collapse()
 
-            public byte[] Collapse()
             {
                 Dictionary<string, int> functionOffsets = new();
 
+                Called.Add("Main");
                 MachineCode.Add(Call, "Main");
                 MachineCode.Add(Halt);
+
 
                 functionOffsets["Main"] = 6;
                 MachineCode.AddRange(Functions["Main"]);
 
-                foreach (var function in Functions)
+                foreach (var function in Functions.Where(kvp => Called.Contains(kvp.Key)))
                 {
                     if (function.Key == "Main") continue;
                     functionOffsets[function.Key] = MachineCode.Size;
@@ -44,7 +43,8 @@ namespace iLang.Compilers.StacksCompiler
                     }
                 }
 
-                return MachineCode.Instruction.SelectMany(x => {
+                return MachineCode.Instruction.SelectMany(x =>
+                {
                     if (x.Operands.Length > 0 && (x.Operands[0] is Value value))
                     {
                         return [x.Op.OpCode, .. BitConverter.GetBytes(value.Number)];
@@ -54,14 +54,20 @@ namespace iLang.Compilers.StacksCompiler
             }
         }
 
-        private static void CompileIdentifier(Identifier identifier, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileIdentifier(Identifier identifier_, Context<Stacks> context, GlobalContext  GlobalContext)
         {
+            var identifier = identifier_ as Name;
             if (context.Variables.ContainsKey(identifier.FullName))
             {
                 context.Bytecode.Add(Push, context.Variables[identifier.FullName]);
                 context.Bytecode.Add(Push, 0);
                 context.Bytecode.Add(Load);
 
+            } else if (GlobalContext.GlobalVariables.ContainsKey(identifier.FullName))
+            {
+                context.Bytecode.Add(Push, GlobalContext.GlobalVariables[identifier.FullName]);
+                context.Bytecode.Add(Push, 1);
+                context.Bytecode.Add(Load);
             }
             else
             {
@@ -69,29 +75,33 @@ namespace iLang.Compilers.StacksCompiler
             }
         }
 
-        private static void CompileBoolean(Boolean boolean, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileBoolean(Boolean boolean, Context<Stacks> context, GlobalContext  GlobalContext )
         {
             context.Bytecode.Add(Push, boolean.Value ? 1 : 0);
         }
 
-        private static void CompileNumber(Number number, Context<Stacks> context, FunctionContext _)
+        private static void CompileNumber(Number number, Context<Stacks> context, GlobalContext  _)
         {
             context.Bytecode.Add(Push, (int)number.Value);
         }
 
-        private static void CompileCall(CallExpr call, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileCall(CallExpression call, Context<Stacks> context, GlobalContext  GlobalContext)
         {
             foreach (var arg in call.Args.Items)
             {
-                CompileExpression(arg, context, functionContext);
+                CompileExpression(arg, context, GlobalContext );
             }
-            context.Bytecode.Add(Call, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
+
+
+            string funcName = Tools.Mangle(GlobalContext.CurrentNamespace, call.Function);
+            GlobalContext.Called.Add(funcName);
+            context.Bytecode.Add(Call, funcName);
         }
 
-        private static void CompileBinaryOp(BinaryOp binaryOp, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileBinaryOp(BinaryOperation binaryOp, Context<Stacks> context, GlobalContext  GlobalContext )
         {
-            CompileExpression(binaryOp.Right, context, functionContext);
-            CompileExpression(binaryOp.Left, context, functionContext);
+            CompileExpression(binaryOp.Right, context, GlobalContext );
+            CompileExpression(binaryOp.Left, context, GlobalContext );
             switch (binaryOp.Op.Value)
             {
                 case '+':
@@ -132,9 +142,9 @@ namespace iLang.Compilers.StacksCompiler
             }
         }
 
-        private static void CompileUnaryOp(UnaryOp unaryOp, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileUnaryOp(UnaryOperation unaryOp, Context<Stacks> context, GlobalContext  GlobalContext )
         {
-            CompileExpression(unaryOp.Right, context, functionContext);
+            CompileExpression(unaryOp.Right, context, GlobalContext );
             switch (unaryOp.Op.Value)
             {
                 case '+':
@@ -151,69 +161,69 @@ namespace iLang.Compilers.StacksCompiler
             }
         }
 
-        private static void CompileParenthesis(ParenthesisExpr parenthesis, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileParenthesis(ParenthesisExpr parenthesis, Context<Stacks> context, GlobalContext  GlobalContext )
         {
-            CompileExpression(parenthesis.Body, context, functionContext);
+            CompileExpression(parenthesis.Body, context, GlobalContext );
         }
 
-        private static void CompileExpression(Expression expression, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileExpression(Expression expression, Context<Stacks> context, GlobalContext  GlobalContext )
         {
             switch (expression)
             {
                 case Atom atom:
-                    CompileAtom(atom, context, functionContext);
+                    CompileAtom(atom, context, GlobalContext );
                     break;
-                case CallExpr call:
-                    CompileCall(call, context, functionContext);
+                case CallExpression call:
+                    CompileCall(call, context, GlobalContext );
                     break;
-                case BinaryOp binaryOp:
-                    CompileBinaryOp(binaryOp, context, functionContext);
+                case BinaryOperation binaryOp:
+                    CompileBinaryOp(binaryOp, context, GlobalContext );
                     break;
-                case UnaryOp unaryOp:
-                    CompileUnaryOp(unaryOp, context, functionContext);
+                case UnaryOperation unaryOp:
+                    CompileUnaryOp(unaryOp, context, GlobalContext );
                     break;
                 case ParenthesisExpr parenthesis:
-                    CompileParenthesis(parenthesis, context, functionContext);
+                    CompileParenthesis(parenthesis, context, GlobalContext );
                     break;
                 default:
                     throw new Exception($"Unknown expression type {expression.GetType()}");
             }
         }
 
-        private static void CompileStatement(Statement statement, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileStatement(Statement statement, Context<Stacks> context, GlobalContext  GlobalContext )
         {
             switch (statement)
             {
                 case IfStatement conditional:
-                    CompileConditional(conditional, context, functionContext);
+                    CompileConditional(conditional, context, GlobalContext );
                     break;
                 case VarDeclaration varDeclaration:
-                    CompileVarDeclaration(varDeclaration, context, functionContext);
+                    CompileVarDeclaration(varDeclaration, context, GlobalContext );
                     break;
                 case Assignment assignment:
-                    CompileAssignment(assignment, context, functionContext);
+                    CompileAssignment(assignment, context, GlobalContext );
                     break;
                 case ReturnStatement returnStatement:
-                    CompileReturn(returnStatement, context, functionContext);
+                    CompileReturn(returnStatement, context, GlobalContext );
                     break;
                 case WhileStatement loop:
-                    CompileLoop(loop, context, functionContext);
+                    CompileLoop(loop, context, GlobalContext );
                     break;
                 default:
                     throw new Exception($"Unknown statement type {statement.GetType()}");
             }
         }
 
-        private static void CompileLoop(WhileStatement loop, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileLoop(WhileStatement loop, Context<Stacks> context, GlobalContext  GlobalContext )
         {
             int current = context.Bytecode.Instruction.Count;
             int currentSize = context.Bytecode.Size;
 
             var snapshot = context.Snapshot;
-            CompileBlock(loop.Body, snapshot, functionContext);
+            CompileBlock(loop.Body, snapshot, GlobalContext );
             var bodySliceSize = new Bytecode<Stacks>(snapshot.Bytecode.Instruction.Skip(context.Bytecode.Instruction.Count).ToList()).Size;
 
-            CompileExpression(loop.Condition, context, functionContext);
+            CompileExpression(loop.Condition, context, GlobalContext );
 
             context.Bytecode.Add(Push, bodySliceSize + 6); // 24 + bodySlice.Size
 
@@ -224,99 +234,115 @@ namespace iLang.Compilers.StacksCompiler
 
             context.Bytecode.Add(CJump); // 7  + bodySlice.Size
 
-            CompileBlock(loop.Body, context, functionContext); // 6 + bodySlice.Size
+            CompileBlock(loop.Body, context, GlobalContext ); // 6 + bodySlice.Size
 
             int jumpSize = 6 + context.Bytecode.Size - currentSize;
             context.Bytecode.Add(Push, -jumpSize); // 6
             context.Bytecode.Add(Jump); // 1
         }
 
-        private static void CompileBlock(Block block, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileBlock(Block block, Context<Stacks> context, GlobalContext  GlobalContext )
         {
             foreach (var statement in block.Items)
             {
-                CompileStatement(statement, context, functionContext);
+                CompileStatement(statement, context, GlobalContext );
             }
         }
 
-        private static void CompileReturn(ReturnStatement returnStatement, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileReturn(ReturnStatement returnStatement, Context<Stacks> context, GlobalContext  GlobalContext )
         {
-            CompileExpression(returnStatement.Value, context, functionContext);
+            CompileExpression(returnStatement.Value, context, GlobalContext );
             context.Bytecode.Add(Ret);
         }
 
-        private static void CompileVarDeclaration(VarDeclaration varDeclaration, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileVarDeclaration(VarDeclaration varDeclaration, Context<Stacks> context, GlobalContext  GlobalContext )
         {
             if (context.Variables.ContainsKey(varDeclaration.Name.FullName))
             {
                 throw new Exception($"Variable {varDeclaration.Name.FullName} already defined");
             }
 
-            context.Variables[varDeclaration.Name.FullName] = context.Variables.Count;
+            CompileExpression(varDeclaration.Value, context, GlobalContext );
+            int address = varDeclaration.IsGlobal? GlobalContext.GlobalVariables.Count : context.Variables.Count;
 
-            CompileExpression(varDeclaration.Value, context, functionContext);
-            context.Bytecode.Add(Push, context.Variables[varDeclaration.Name.FullName]);
-            context.Bytecode.Add(Push, 0);
-            context.Bytecode.Add(Store);
-        }
-
-        private static void CompileAssignment(Assignment assignment, Context<Stacks> context, FunctionContext functionContext)
-        {
-            if (!context.Variables.ContainsKey(assignment.Name.FullName))
+            if (varDeclaration.IsGlobal)
             {
-                throw new Exception($"Variable {assignment.Name.FullName} not found");
+                GlobalContext.GlobalVariables[varDeclaration.Name.FullName] = address;
+            }
+            else
+            {
+                context.Variables[varDeclaration.Name.FullName] = address;
             }
 
-            CompileExpression(assignment.Value, context, functionContext);
-            context.Bytecode.Add(Push, context.Variables[assignment.Name.FullName]);
-            context.Bytecode.Add(Push, 0);
+            context.Bytecode.Add(Push, address);
+            context.Bytecode.Add(Push, varDeclaration.IsGlobal? 1 : 0);
             context.Bytecode.Add(Store);
         }
 
-        private static void CompileAtom(Atom tree, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileAssignment(Assignment assignment, Context<Stacks> context, GlobalContext  GlobalContext )
+        {
+            var name = assignment.Name as Name;
+            CompileExpression(assignment.Value, context, GlobalContext);
+            if(context.Variables.ContainsKey(name.FullName))
+            {
+                context.Bytecode.Add(Push, context.Variables[name.FullName]);
+                context.Bytecode.Add(Push, 0);
+            } else if (GlobalContext.GlobalVariables.ContainsKey(name.FullName))
+            {
+                context.Bytecode.Add(Push, GlobalContext.GlobalVariables[name.FullName]);
+                context.Bytecode.Add(Push, 1);
+            }
+            else
+            {
+                throw new Exception($"Variable {name.FullName} not found");
+            }
+            context.Bytecode.Add(Store);
+        }
+
+        private static void CompileAtom(Atom tree, Context<Stacks> context, GlobalContext  GlobalContext )
         {
             switch (tree)
             {
                 case Identifier identifier:
-                    CompileIdentifier(identifier, context, functionContext);
+                    CompileIdentifier(identifier, context, GlobalContext );
                     break;
                 case Number number:
-                    CompileNumber(number, context, functionContext);
+                    CompileNumber(number, context, GlobalContext );
                     break;
                 case Boolean boolean:
-                    CompileBoolean(boolean, context, functionContext);
+                    CompileBoolean(boolean, context, GlobalContext );
                     break;
                 default:
                     throw new Exception($"Unknown atom type {tree.GetType()}");
             }
         }
 
-        private static void CompileConditional(IfStatement conditional, Context<Stacks> context, FunctionContext functionContext)
+        private static void CompileConditional(IfStatement conditional, Context<Stacks> context, GlobalContext  GlobalContext )
         {
             Context<Stacks> snapshot1 = context.Snapshot;
-            CompileBlock(conditional.True, snapshot1, functionContext);
+            CompileBlock(conditional.True, snapshot1, GlobalContext );
             var trueSlice = new Bytecode<Stacks>(snapshot1.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
             Context<Stacks> snapshot2 = context.Snapshot;
-            CompileBlock(conditional.False, snapshot2, functionContext);
+            CompileBlock(conditional.False, snapshot2, GlobalContext );
             var falseSlice = new Bytecode<Stacks>(snapshot2.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
             context.Bytecode.Add(Push, falseSlice.Size + 6); // 5
-            CompileExpression(conditional.Condition, context, functionContext);
+            CompileExpression(conditional.Condition, context, GlobalContext );
             context.Bytecode.Add(CJump); // 17
 
-            CompileBlock(conditional.False, context, functionContext); // 17 + falseSlice.Size
+            CompileBlock(conditional.False, context, GlobalContext ); // 17 + falseSlice.Size
 
             context.Bytecode.Add(Push, trueSlice.Size); // 22 + falseSlice.Size
             context.Bytecode.Add(Jump); // 23 + falseSlice.Size
 
-            CompileBlock(conditional.True, context, functionContext);
+            CompileBlock(conditional.True, context, GlobalContext );
         }
 
-        private static void CompileFunction(string @namespace, FunctionDef function, FunctionContext functionContext)
+        private static void CompileFunction(string @namespace, FunctionDefinition function, GlobalContext  GlobalContext )
         {
             string mangledName = Tools.Mangle(@namespace, function.Name);
-            if (functionContext.Functions.ContainsKey(mangledName))
+            if (GlobalContext .Functions.ContainsKey(mangledName))
             {
                 throw new Exception($"Function {function.Name.FullName} already defined");
             }
@@ -335,45 +361,29 @@ namespace iLang.Compilers.StacksCompiler
             switch (function.Body)
             {
                 case Block block:
-                    CompileBlock(block, localContext, functionContext);
+                    CompileBlock(block, localContext, GlobalContext );
                     break;
                 case Expression expression:
-                    CompileExpression(expression, localContext, functionContext);
+                    CompileExpression(expression, localContext, GlobalContext );
                     localContext.Bytecode.Add(Ret);
                     break;
                 default:
                     throw new Exception($"Unknown body type {function.Body.GetType()}");
             }
 
-            functionContext.Functions[mangledName] = localContext.Bytecode;
+            GlobalContext .Functions[mangledName] = localContext.Bytecode;
         }
 
         public static byte[] Compile(CompilationUnit compilationUnit, string @namespace = "")
         {
-            var functionContext = new FunctionContext();
-
-            foreach (var library in compilationUnit.inludes)
-            {
-                functionContext.CurrentNamespace = library.Key;
-                foreach (var function in library.Value.Body)
-                {
-                    if (function is FunctionDef functionDef)
-                    {
-                        CompileFunction(library.Key, functionDef, functionContext);
-                    }
-                    else
-                    {
-                        throw new Exception($"Unknown tree type {function.GetType()}");
-                    }
-                }
-            }
-
-            functionContext.CurrentNamespace = @namespace;
+            var GlobalContext  = new GlobalContext ();
+            
+            GlobalContext .CurrentNamespace = @namespace;
             foreach (var tree in compilationUnit.Body)
             {
-                if (tree is FunctionDef function)
+                if (tree is FunctionDefinition function)
                 {
-                    CompileFunction(@namespace, function, functionContext);
+                    CompileFunction(@namespace, function, GlobalContext );
                 }
                 else
                 {
@@ -381,7 +391,22 @@ namespace iLang.Compilers.StacksCompiler
                 }
             }
 
-            return functionContext.Collapse();
+            foreach (var library in compilationUnit.FuncInludes)
+            {
+                GlobalContext .CurrentNamespace = library.Key;
+                foreach (var function in library.Value.Body)
+                {
+                    if (function is FunctionDefinition functionDef)
+                    {
+                        CompileFunction(library.Key, functionDef, GlobalContext );
+                    }
+                    else
+                    {
+                        throw new Exception($"Unknown tree type {function.GetType()}");
+                    }
+                }
+            }
+            return GlobalContext .Collapse();
         }
     }
 }
