@@ -2,7 +2,7 @@ include["number.il" as NumberLib, "typedef.ilt" as TypesLib];
 
 Main: {
 	let global sum : Number[4] = new Number|[23, 7, 1999, 23071999];
-	let global test : Number[1][4] = new Number[4]|[sum];
+	let global test : Number[2][4] = new Number[4]|[sum, sum];
 	let value : Logic[3] = new Logic|[false, false, false];
 
 	let index : Number = 0;
