@@ -5,10 +5,258 @@ using static VirtualMachine.Instructions.InstructionsExt.StacksExt;
 using VirtualMachine.iLang.Compilers;
 using String = System.String;
 using VirtualMachine.Example.Register;
+using Microsoft.Diagnostics.NETCore.Client;
+using Sigil;
+using System.Reflection;
+using VirtualMachine.Instruction;
 namespace iLang.Compilers.StacksCompiler
 {
     public static class Compiler
     {
+        public static class ToClr
+        {
+            internal static Bytecode<Stacks> Simplify(byte[] bytecode)
+            {
+                var instructionMap = InstructionSet<Stacks>.Opcodes.ToDictionary(instructions => instructions.OpCode);
+                Bytecode<Stacks> simplifiedBytecode = new([]);
+                for (int j = 0; j < bytecode.Length; j++)
+                {
+                    var instruction = instructionMap[bytecode[j]];
+                    var metadata = instruction.GetType().GetCustomAttribute<MetadataAttribute>();
+                    var operands = new Operand[metadata.ImmediateSizes.Length];
+                    for (int k = 0; k < metadata.ImmediateSizes.Length; k++)
+                    {
+                        operands[k] = new Value(BitConverter.ToInt32(bytecode[(j + 1)..(j + metadata.ImmediateSizes[k] + 1)]));
+                        j += metadata.ImmediateSizes[k];
+                    }
+
+                    simplifiedBytecode.Add(instruction, operands);
+                }
+
+                return simplifiedBytecode;
+            }
+
+            public static MethodInfo ToMethodInfo(byte[] bytecodeInput)
+            {
+                Emit<Action<byte[]>> method = Emit<Action<byte[]>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
+
+
+                var bytecode = Simplify(bytecodeInput);
+
+                using Local mem = method.DeclareLocal<int[]>("mem");
+
+                method.LoadConstant(1024);
+                method.NewArray<int>();
+                method.StoreLocal(mem);
+
+                Label[] labels = bytecode.Instruction.Select(x => method.DefineLabel()).ToArray();
+
+                for (int i = 0; i < bytecode.Instruction.Count; i++)
+                {
+                    var instruction = bytecode.Instruction[i];
+                    method.MarkLabel(labels[i]);
+
+                    if (instruction.Op == Push)
+                    {
+                        if (instruction.Operands[0] is Value value)
+                        {
+                            method.LoadConstant(value.Number);
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Add)
+                    {
+                        method.Add();
+                        continue;
+                    }
+
+                    if (instruction.Op == Sub)
+                    {
+                        method.Subtract();
+                        continue;
+                    }
+
+                    if (instruction.Op == Mul)
+                    {
+                        method.Multiply();
+                        continue;
+                    }
+
+                    if (instruction.Op == Div)
+                    {
+                        method.Divide();
+                        continue;
+                    }
+
+                    if (instruction.Op == And)
+                    {
+                        method.And();
+                        continue;
+                    }
+
+                    if (instruction.Op == Or)
+                    {
+                        method.Or();
+                        continue;
+                    }
+
+                    if (instruction.Op == Xor)
+                    {
+                        method.Xor();
+                        continue;
+                    }
+
+                    if (instruction.Op == Not)
+                    {
+                        method.Not();
+                        continue;
+                    }
+
+                    if (instruction.Op == Jump)
+                    {
+                        throw new UnsupportedCommandException("JUMP");
+                        continue;
+                    }
+
+                    if (instruction.Op == CJump)
+                    {
+                        throw new UnsupportedCommandException("JUMPC");
+                        continue;
+                    }
+
+                    if (instruction.Op == Load)
+                    {
+                        if (instruction.Operands[0] is Value address && instruction.Operands[1] is Value isGlobal)
+                        {
+                            Label sourceLocal = method.DefineLabel();
+                            Label startHandling = method.DefineLabel();
+
+                            method.LoadConstant(isGlobal.Number);
+                            method.LoadConstant(0);
+                            method.BranchIfEqual(sourceLocal);
+
+                            method.LoadArgument(0);
+                            method.Branch(startHandling);
+
+                            method.MarkLabel(sourceLocal);
+                            method.LoadLocal(mem);
+
+                            method.MarkLabel(startHandling);
+
+                            method.LoadConstant(address.Number);
+                            method.LoadElement<int>();
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Store)
+                    {
+                        if (instruction.Operands[0] is Value address && instruction.Operands[1] is Value isGlobal)
+                        {
+                            Label sourceLocal = method.DefineLabel();
+                            Label startHandling = method.DefineLabel();
+
+                            method.LoadConstant(isGlobal.Number);
+                            method.LoadConstant(0);
+                            method.BranchIfEqual(sourceLocal);
+
+                            method.LoadArgument(0);
+                            method.Branch(startHandling);
+
+                            method.MarkLabel(sourceLocal);
+                            method.LoadLocal(mem);
+
+                            method.MarkLabel(startHandling);
+
+                            method.LoadConstant(address.Number);
+                            method.LoadConstant(0);
+                            method.StoreElement<int>();
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Dup)
+                    {
+                        method.Duplicate();
+                        continue;
+                    }
+
+                    if (instruction.Op == Gt)
+                    {
+                        method.CompareGreaterThan();
+                        continue;
+                    }
+
+                    if (instruction.Op == Lt)
+                    {
+                        method.CompareLessThan();
+                        continue;
+                    }
+
+                    if (instruction.Op == Eq)
+                    {
+                        method.CompareEqual();
+                        continue;
+                    }
+
+                    if (instruction.Op == Mod)
+                    {
+                        method.Remainder();
+                        continue;
+                    }
+
+                    if (instruction.Op == Call)
+                    {
+                        throw new UnsupportedCommandException("CALL");
+                        continue;
+                    }
+
+                    if (instruction.Op == Ret)
+                    {
+                        method.Return();
+                        continue;
+                    }
+
+                    if (instruction.Op == Swap)
+                    {
+                        using Local a = method.DeclareLocal<int>();
+                        using Local b = method.DeclareLocal<int>();
+
+                        method.StoreLocal(a);
+                        method.StoreLocal(b);
+
+                        method.LoadLocal(a);
+                        method.LoadLocal(b);
+                        continue;
+                    }
+
+                    if (instruction.Op == Halt)
+                    {
+                        method.Return();
+                        continue;
+                    }
+
+                    throw new Exception($"Unknown instruction {instruction.Op}");
+                }
+
+                method.Return();
+                return method.CreateMethod();
+            }
+        }
+
         private class FunctionContext() : Context<Stacks>(String.Empty)
         {
             public string CurrentNamespace { get; set; } = System.String.Empty;

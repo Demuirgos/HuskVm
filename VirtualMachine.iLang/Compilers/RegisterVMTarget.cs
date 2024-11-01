@@ -4,10 +4,414 @@ using static VirtualMachine.Instructions.InstructionsExt.RegistersExt;
 using VirtualMachine.Example.Register;
 using VirtualMachine.iLang.Compilers;
 using VirtualMachine.Example;
+using System.Reflection;
+using Sigil;
+using VirtualMachine.Instruction;
+using Microsoft.Diagnostics.NETCore.Client;
 namespace iLang.Compilers.RegisterTarget
 {
     public static class Compiler
     {
+        public static class ToClr
+        {
+            internal static Bytecode<Registers> Simplify(byte[] bytecode)
+            {
+                var instructionMap = InstructionSet<Registers>.Opcodes.ToDictionary(instructions => instructions.OpCode);
+                Bytecode<Registers> simplifiedBytecode = new([]);
+                for (int j = 0; j < bytecode.Length; j++)
+                {
+                    var instruction = instructionMap[bytecode[j]];
+                    var metadata = instruction.GetType().GetCustomAttribute<MetadataAttribute>();
+                    var operands = new Operand[metadata.ImmediateSizes.Length];
+                    for (int k = 0; k < metadata.ImmediateSizes.Length; k++)
+                    {
+                        operands[k] = new Value(BitConverter.ToInt32(bytecode[(j + 1)..(j + metadata.ImmediateSizes[k] + 1)]));
+                        j += metadata.ImmediateSizes[k];
+                    }
+
+                    simplifiedBytecode.Add(instruction, operands);
+                }
+
+                return simplifiedBytecode;
+            }
+
+            public static MethodInfo ToMethodInfo(byte[] bytecodeInput)
+            {
+                Emit<Action<byte[]>> method = Emit<Action<byte[]>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
+
+
+                var bytecode = Simplify(bytecodeInput);
+
+                using Local eax = method.DeclareLocal<int>("eax");
+                using Local ebx = method.DeclareLocal<int>("ebx");
+                using Local ecx = method.DeclareLocal<int>("ecx");
+                using Local edx = method.DeclareLocal<int>("edx");
+
+                using Local fco = method.DeclareLocal<int>("fco");
+                using Local cjc = method.DeclareLocal<int>("cjc");
+                using Local cjo = method.DeclareLocal<int>("cjo");
+                using Local mof = method.DeclareLocal<int>("mof");
+
+                using Local mem = method.DeclareLocal<int[]>("mem");
+
+                method.LoadConstant(1024);
+                method.NewArray<int>();
+                method.StoreLocal(mem);
+
+                Local GetLocal(int index) => index switch
+                {
+                    0 => eax,
+                    1 => ebx,
+                    2 => ecx,
+                    3 => edx,
+                    4 => fco,
+                    5 => cjc,
+                    6 => cjo,
+                    7 => mof,
+                    _ => throw new Exception($"Unknown register {index}")
+                };
+
+                Label[] labels = bytecode.Instruction.Select(x => method.DefineLabel()).ToArray();
+
+                for (int i = 0; i < bytecode.Instruction.Count; i++)
+                {
+                    var instruction = bytecode.Instruction[i];
+                    method.MarkLabel(labels[i]);
+
+                    if (instruction.Op == Mov)
+                    {
+                        if (instruction.Operands[0] is Value value && instruction.Operands[1] is Value destination)
+                        {
+                            method.LoadConstant(value.Number);
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Add)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.Add();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Sub)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.Subtract();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Mul)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.Multiply();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Div)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.Divide();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == And)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.And();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Or)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.Or();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Xor)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.Xor();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Not)
+                    {
+                        if (instruction.Operands[0] is Value value && instruction.Operands[1] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value.Number));
+                            method.Not();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Jump)
+                    {
+                        throw new UnsupportedCommandException("JUMP");
+                        continue;
+                    }
+
+                    if (instruction.Op == CJump)
+                    {
+                        throw new UnsupportedCommandException("JUMPC");
+                        continue;
+                    }
+
+                    if (instruction.Op == Load)
+                    {
+                        if (instruction.Operands[0] is Value target && instruction.Operands[1] is Value address && instruction.Operands[2] is Value isGlobal)
+                        {
+                            Label sourceLocal = method.DefineLabel();
+                            Label startHandling = method.DefineLabel();
+
+                            method.LoadLocal(GetLocal(isGlobal.Number));
+                            method.LoadConstant(0);
+                            method.BranchIfEqual(sourceLocal);
+
+                            method.LoadArgument(0);
+                            method.Branch(startHandling);
+
+                            method.MarkLabel(sourceLocal);
+                            method.LoadLocal(mem);
+
+                            method.MarkLabel(startHandling);
+                            method.LoadLocal(GetLocal(address.Number));
+                            method.LoadElement<int>();
+
+                            method.StoreLocal(GetLocal(target.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Store)
+                    {
+                        if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value address && instruction.Operands[2] is Value isGlobal)
+                        {
+                            Label targetLocal = method.DefineLabel();
+                            Label startHandling = method.DefineLabel();
+
+                            method.LoadLocal(GetLocal(isGlobal.Number));
+                            method.LoadConstant(0);
+                            method.BranchIfEqual(targetLocal);
+
+                            method.LoadArgument(0);
+                            method.Branch(startHandling);
+
+                            method.MarkLabel(targetLocal);
+                            method.LoadLocal(mem);
+
+                            method.MarkLabel(startHandling);
+                            method.LoadLocal(GetLocal(address.Number));
+                            method.LoadLocal(GetLocal(source.Number));
+                            method.StoreElement<int>();
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Dup)
+                    {
+                        if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(source.Number));
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Gt)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.CompareGreaterThan();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Lt)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.CompareLessThan();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Eq)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.CompareEqual();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Mod)
+                    {
+                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(value1.Number));
+                            method.LoadLocal(GetLocal(value2.Number));
+                            method.Remainder();
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Call)
+                    {
+                        throw new UnsupportedCommandException("CALL");
+                        continue;
+                    }
+
+                    if (instruction.Op == Ret)
+                    {
+                        method.Return();
+                        continue;
+                    }
+
+                    if (instruction.Op == Swap)
+                    {
+                        if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(source.Number));
+                            method.LoadLocal(GetLocal(destination.Number));
+                            method.StoreLocal(GetLocal(source.Number));
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
+                    if (instruction.Op == Halt)
+                    {
+                        method.Return();
+                        continue;
+                    }
+
+                    throw new Exception($"Unknown instruction {instruction.Op}");
+                }
+
+
+
+                method.Return();
+                return method.CreateMethod();
+            }
+        }
+
         private const int eax = 0;
         private const int ebx = 1;
         private const int ecx = 2;
