@@ -70,7 +70,7 @@ var filePath = args[0];
 var shouldTime = tokens.Contains("t");
 var shouldDisassemble = tokens.Contains("d");
 var shouldTrace = tokens.Contains("tr");
-
+var shouldAot = tokens.Contains("aot");
 
 // read the file content
 var code = System.IO.File.ReadAllText(filePath);
@@ -122,7 +122,15 @@ object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationU
     ITracer<Registers> tracer_r = shouldTrace ? new Tracer<Registers>() : NullTracer<Registers>.Instance;
     byte[] program_r = iLang.Compilers.RegisterTarget.Compiler.Compile(function);
 
+
     if (shouldDisassemble) Console.WriteLine(AssemblyBuilder<Registers>.Disassemble(program_r));
+
+    if (shouldAot)
+    {
+        var methodInfo = iLang.Compilers.RegisterTarget.Compiler.ToClr.ToMethodInfo(program_r);
+        methodInfo.Invoke(null, []);
+        return null;
+    }
 
     IVirtualMachine<Registers> vm_r = new VirtualMachine.Example.Register.VirtualMachine();
     vm_r.LoadProgram(program_r);
@@ -144,6 +152,13 @@ object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit
     byte[] program_s = iLang.Compilers.StacksCompiler.Compiler.Compile(function);
 
     if (shouldDisassemble) Console.WriteLine(AssemblyBuilder<Stacks>.Disassemble(program_s));
+
+    if (shouldAot)
+    {
+        var methodInfo = iLang.Compilers.StacksCompiler.Compiler.ToClr.ToMethodInfo(program_s);
+        methodInfo.Invoke(null, []);
+        return null;
+    }
 
     IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
     vm_s.LoadProgram(program_s);

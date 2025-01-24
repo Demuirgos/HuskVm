@@ -40,7 +40,6 @@ namespace iLang.Compilers.StacksCompiler
             {
                 Emit<Action<byte[]>> method = Emit<Action<byte[]>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
 
-
                 var bytecode = Simplify(bytecodeInput);
 
                 using Local mem = method.DeclareLocal<int[]>("mem");
@@ -48,6 +47,7 @@ namespace iLang.Compilers.StacksCompiler
                 method.LoadConstant(1024);
                 method.NewArray<int>();
                 method.StoreLocal(mem);
+
 
                 Label[] labels = bytecode.Instruction.Select(x => method.DefineLabel()).ToArray();
 
@@ -282,7 +282,7 @@ namespace iLang.Compilers.StacksCompiler
 
                 foreach (var instruction in MachineCode.Instruction)
                 {
-                    if (instruction.Op == Call && instruction.Operands[0] is Placeholder placeholder)
+                    if (instruction.Op == Call && instruction.Operands[0] is FunctionName placeholder)
                     {
                         if (!functionOffsets.ContainsKey(placeholder.atom))
                         {
@@ -329,11 +329,13 @@ namespace iLang.Compilers.StacksCompiler
 
         private static void CompileCall(CallExpr call, Context<Stacks> context, FunctionContext functionContext)
         {
+            var mangledName = Tools.Mangle(functionContext.CurrentNamespace, call.Function); 
+
             foreach (var arg in call.Args.Items)
             {
                 CompileExpression(arg, context, functionContext);
             }
-            context.Bytecode.Add(Call, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
+            context.Bytecode.Add(Call, mangledName);
         }
 
         private static void CompileBinaryOp(BinaryOp binaryOp, Context<Stacks> context, FunctionContext functionContext)
@@ -463,20 +465,15 @@ namespace iLang.Compilers.StacksCompiler
 
             CompileExpression(loop.Condition, context, functionContext);
 
-            context.Bytecode.Add(Push, bodySliceSize + 6); // 24 + bodySlice.Size
-
-            context.Bytecode.Add(Swap); // 8 + bodySlice.Size
 
             context.Bytecode.Add(Push, 0); // 13 + bodySlice.Size
             context.Bytecode.Add(Eq); // 8 + bodySlice.Size
 
-            context.Bytecode.Add(CJump); // 7  + bodySlice.Size
+            context.Bytecode.Add(CJump, bodySliceSize + 5); // 7  + bodySlice.Size
 
             CompileBlock(loop.Body, context, functionContext); // 6 + bodySlice.Size
 
-            int jumpSize = 6 + context.Bytecode.Size - currentSize;
-            context.Bytecode.Add(Push, -jumpSize); // 6
-            context.Bytecode.Add(Jump); // 1
+            context.Bytecode.Add(Jump, -(5 + context.Bytecode.Size - currentSize)); // 1
         }
 
         private static void CompileBlock(Block block, Context<Stacks> context, FunctionContext functionContext)
@@ -549,14 +546,12 @@ namespace iLang.Compilers.StacksCompiler
             CompileBlock(conditional.False, snapshot2, functionContext);
             var falseSlice = new Bytecode<Stacks>(snapshot2.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
-            context.Bytecode.Add(Push, falseSlice.Size + 6); // 5
             CompileExpression(conditional.Condition, context, functionContext);
-            context.Bytecode.Add(CJump); // 17
+            context.Bytecode.Add(CJump, falseSlice.Size + 5); // 17
 
             CompileBlock(conditional.False, context, functionContext); // 17 + falseSlice.Size
 
-            context.Bytecode.Add(Push, trueSlice.Size); // 22 + falseSlice.Size
-            context.Bytecode.Add(Jump); // 23 + falseSlice.Size
+            context.Bytecode.Add(Jump, trueSlice.Size); // 23 + falseSlice.Size
 
             CompileBlock(conditional.True, context, functionContext);
         }

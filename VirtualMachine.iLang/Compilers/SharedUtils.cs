@@ -22,7 +22,7 @@ namespace VirtualMachine.iLang.Compilers
     record Operand
     {
         public static implicit operator Operand(int value) => new Value(value);
-        public static implicit operator Operand(string value) => new Placeholder(value);
+        public static implicit operator Operand(string value) => new FunctionName(value);
 
         public static Operand None => new None();
     }
@@ -35,7 +35,7 @@ namespace VirtualMachine.iLang.Compilers
     {
         public override string ToString() => "";
     }
-    record Placeholder(string atom) : Operand
+    record FunctionName(string atom) : Operand
     {
         public override string ToString() => atom;
     }
@@ -49,6 +49,13 @@ namespace VirtualMachine.iLang.Compilers
 
         public void RemoveRange(int start, int count) => Instruction.RemoveRange(start, count);
         public void RemoveRange(int start) => Instruction.RemoveRange(start, Instruction.Count - start);
+
+        public int Pc(int index) => Instruction[..index].Sum(x => {
+            // get Metadata attribute from instuction
+            var metadata = x.Op.GetType().GetCustomAttribute<MetadataAttribute>();
+            var opcodeSize = (metadata?.ImmediateSizes.Sum() ?? 0) + 1;
+            return opcodeSize;
+        });
 
         public int Size => Instruction.Sum(x => {
             // get Metadata attribute from instuction

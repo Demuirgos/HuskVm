@@ -147,33 +147,30 @@ public static class Instructions {
         }
     }
 
-    [Metadata(1, 0, 1)]
+    [Metadata(1, 0, 4)]
     public class Jump : Instruction<Registers> {
         public override byte OpCode { get; } = 0x0a;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
-            var span = state.Program.AsSpan(state.ProgramCounter, 1);
-            int valueReg = span[0];
-            state.ProgramCounter += 1 + Registers[valueReg];
+            var offset = BitConverter.ToInt32(state.Program.AsSpan(state.ProgramCounter, 4));
+            state.ProgramCounter += 4 + offset;
             return vm;
         }
     }
 
-    [Metadata(2, 0, 1, 1)]
+    [Metadata(2, 0, 1, 4)]
     public class CJump : Instruction<Registers> {
         public override byte OpCode { get; } = 0x0b;
         public override IVirtualMachine<Registers> Apply(IVirtualMachine<Registers> vm) {
             var state = vm.State;
             var Registers = state.Holder;
-            var span = state.Program.AsSpan(state.ProgramCounter, 2);
-            int condition = span[0];
-            int value = span[1];
-
-            state.ProgramCounter += 2;
+            var condition = state.Program[state.ProgramCounter++];
+            var offset = BitConverter.ToInt32(state.Program.AsSpan(state.ProgramCounter, 4));
+            state.ProgramCounter += 4;
 
             if (Registers[condition] != 0) {
-                state.ProgramCounter += Registers[value];
+                state.ProgramCounter += offset;
             }
             return vm;
         }

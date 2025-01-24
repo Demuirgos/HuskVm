@@ -1,3 +1,3 @@
-include["number.il" as Number];
+include["number.il" as Number];\
 
-Main: Number::IsPrime(1983685757);
+Main: Number::IsPrime(1);

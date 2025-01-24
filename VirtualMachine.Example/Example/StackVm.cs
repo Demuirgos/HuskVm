@@ -6,7 +6,7 @@ using VirtualMachine.Processor;
 
 namespace VirtualMachine.Example.Stack;
 public static class Instructions {
-    
+
     [Metadata(1, 0, 4)]
     public partial class Push : Instruction<Stacks> {
         public override byte OpCode { get; } = 0x01;
@@ -120,25 +120,29 @@ public static class Instructions {
         }
     }
 
-    [Metadata(1, 0)]
+    [Metadata(0, 0, 4)]
     public partial class Jump : Instruction<Stacks> {
         public override byte OpCode { get; } = 0x0b;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
-            state.ProgramCounter += stack.Pop();
+            var span = state.Program.AsSpan(state.ProgramCounter, 4);
+            int offset = BitConverter.ToInt32(span);
+            state.ProgramCounter += 4 + offset;
             return vm;
         }
     }
 
-    [Metadata(2, 0)]
+    [Metadata(1, 0, 4)]
     public partial class CJump : Instruction<Stacks> {
         public override byte OpCode { get; } = 0x0c;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
             var condition = stack.Pop() != 0;
-            var offset = stack.Pop();
+            var span = state.Program.AsSpan(state.ProgramCounter, 4);
+            int offset = BitConverter.ToInt32(span);
+            state.ProgramCounter += 4;
             if (condition) {
                 state.ProgramCounter += offset;
             }

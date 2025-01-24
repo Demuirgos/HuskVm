@@ -14,21 +14,60 @@ namespace iLang.Compilers.RegisterTarget
     {
         public static class ToClr
         {
-            internal static Bytecode<Registers> Simplify(byte[] bytecode)
+            internal static Bytecode<Registers> Simplify(Emit<Action<byte[]>> method, byte[] bytecode, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label)> functions)
             {
+                labels = new();
+                functions = new();
                 var instructionMap = InstructionSet<Registers>.Opcodes.ToDictionary(instructions => instructions.OpCode);
                 Bytecode<Registers> simplifiedBytecode = new([]);
                 for (int j = 0; j < bytecode.Length; j++)
                 {
+                    var index = j;
                     var instruction = instructionMap[bytecode[j]];
                     var metadata = instruction.GetType().GetCustomAttribute<MetadataAttribute>();
                     var operands = new Operand[metadata.ImmediateSizes.Length];
                     for (int k = 0; k < metadata.ImmediateSizes.Length; k++)
                     {
-                        operands[k] = new Value(BitConverter.ToInt32(bytecode[(j + 1)..(j + metadata.ImmediateSizes[k] + 1)]));
+                        operands[k] = metadata.ImmediateSizes[k] switch
+                        {
+                            1 => new Value(bytecode[j + 1]),
+                            2 => new Value(BitConverter.ToInt16(bytecode, j + 1)),
+                            4 => new Value(BitConverter.ToInt32(bytecode, j + 1)),
+                            _ => throw new Exception("Invalid Immediate Size")
+                        };
                         j += metadata.ImmediateSizes[k];
                     }
 
+                    if (instruction.OpCode == Call.OpCode)
+                    {
+                        if (operands[0] is Value value)
+                        {
+                            Label callTarget = method.DefineLabel();
+                            Label returnTarget = method.DefineLabel();
+                            labels.TryAdd(value.Number, callTarget);
+                            labels.TryAdd(index + 4 + 1, returnTarget);
+
+                            functions.TryAdd(value.Number, (callTarget, returnTarget));
+                        }
+                    }
+
+                    if (instruction.OpCode == Jump.OpCode)
+                    {
+                        if (operands[0] is Value value)
+                        {
+                            labels.TryAdd(value.Number + index + 4 + 1, method.DefineLabel());
+                        }
+                    }
+
+                    if (instruction.OpCode == CJump.OpCode)
+                    {
+                        if (operands[1] is Value value)
+                        {
+                            labels.TryAdd(value.Number + index + 4 + 1 + 1, method.DefineLabel());
+                        }
+
+                        labels.TryAdd(index + 4 + 1 + 1, method.DefineLabel());
+                    }
                     simplifiedBytecode.Add(instruction, operands);
                 }
 
@@ -39,8 +78,9 @@ namespace iLang.Compilers.RegisterTarget
             {
                 Emit<Action<byte[]>> method = Emit<Action<byte[]>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
 
+                Label returnTable = method.DefineLabel();
 
-                var bytecode = Simplify(bytecodeInput);
+                var bytecode = Simplify(method, bytecodeInput, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label) > functions);
 
                 using Local eax = method.DeclareLocal<int>("eax");
                 using Local ebx = method.DeclareLocal<int>("ebx");
@@ -53,10 +93,16 @@ namespace iLang.Compilers.RegisterTarget
                 using Local mof = method.DeclareLocal<int>("mof");
 
                 using Local mem = method.DeclareLocal<int[]>("mem");
-
                 method.LoadConstant(1024);
                 method.NewArray<int>();
                 method.StoreLocal(mem);
+
+                using Local cllstk = method.DeclareLocal<int[]>("cllstk");
+                using Local stkHd = method.DeclareLocal<int>("stkHd");
+                using Local currTrjt = method.DeclareLocal<int>("currTrjt");
+                method.LoadConstant(1024);
+                method.NewArray<int>();
+                method.StoreLocal(cllstk);
 
                 Local GetLocal(int index) => index switch
                 {
@@ -71,16 +117,21 @@ namespace iLang.Compilers.RegisterTarget
                     _ => throw new Exception($"Unknown register {index}")
                 };
 
-                Label[] labels = bytecode.Instruction.Select(x => method.DefineLabel()).ToArray();
+                Console.WriteLine("===================================================================");
 
                 for (int i = 0; i < bytecode.Instruction.Count; i++)
                 {
                     var instruction = bytecode.Instruction[i];
-                    method.MarkLabel(labels[i]);
-
-                    if (instruction.Op == Mov)
+                    int pc = bytecode.Pc(i);
+                    Console.WriteLine($"{pc}: {instruction}");
+                    if (labels.ContainsKey(pc))
                     {
-                        if (instruction.Operands[0] is Value value && instruction.Operands[1] is Value destination)
+                        method.MarkLabel(labels[pc]);
+                    }
+
+                    if (instruction.Op.OpCode == Mov.OpCode)
+                    {
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value)
                         {
                             method.LoadConstant(value.Number);
                             method.StoreLocal(GetLocal(destination.Number));
@@ -89,10 +140,11 @@ namespace iLang.Compilers.RegisterTarget
                         {
                             throw new Exception("Invalid operands");
                         }
+
                         continue;
                     }
 
-                    if (instruction.Op == Add)
+                    if (instruction.Op.OpCode == Add.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -108,7 +160,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Sub)
+                    if (instruction.Op.OpCode == Sub.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -124,7 +176,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Mul)
+                    if (instruction.Op.OpCode == Mul.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -140,7 +192,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Div)
+                    if (instruction.Op.OpCode == Div.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -156,7 +208,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == And)
+                    if (instruction.Op.OpCode == And.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -172,7 +224,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Or)
+                    if (instruction.Op.OpCode == Or.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -188,7 +240,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Xor)
+                    if (instruction.Op.OpCode == Xor.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -204,7 +256,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Not)
+                    if (instruction.Op.OpCode == Not.OpCode)
                     {
                         if (instruction.Operands[0] is Value value && instruction.Operands[1] is Value destination)
                         {
@@ -219,37 +271,72 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Jump)
+                    if (instruction.Op.OpCode == Jump.OpCode)
                     {
-                        throw new UnsupportedCommandException("JUMP");
+                        if (instruction.Operands[0] is Value target)
+                        {
+                            method.Branch(labels[pc + 1 + 4 + target.Number]);
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
                         continue;
                     }
 
-                    if (instruction.Op == CJump)
+                    if (instruction.Op.OpCode == CJump.OpCode)
                     {
-                        throw new UnsupportedCommandException("JUMPC");
+                        if (instruction.Operands[0] is Value condition && instruction.Operands[1] is Value target)
+                        {
+                            method.LoadLocal(GetLocal(condition.Number));
+                            method.BranchIfTrue(labels[pc + 1 + 1 + 4 + target.Number]);
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
                         continue;
                     }
 
-                    if (instruction.Op == Load)
+                    if (instruction.Op.OpCode == Load.OpCode)
                     {
                         if (instruction.Operands[0] is Value target && instruction.Operands[1] is Value address && instruction.Operands[2] is Value isGlobal)
                         {
-                            Label sourceLocal = method.DefineLabel();
-                            Label startHandling = method.DefineLabel();
+
+                            Label globalTarget = method.DefineLabel();
+                            Label localTarget = method.DefineLabel();
+                            Label handlingReg = method.DefineLabel();
+
+                            using Local offset = method.DeclareLocal<int>();
+                            using Local correction = method.DeclareLocal<int>();
+                            method.LoadLocal(GetLocal(address.Number));
+                            method.StoreLocal(offset);
 
                             method.LoadLocal(GetLocal(isGlobal.Number));
                             method.LoadConstant(0);
-                            method.BranchIfEqual(sourceLocal);
+                            method.BranchIfEqual(localTarget);
 
-                            method.LoadArgument(0);
-                            method.Branch(startHandling);
+                            method.LoadConstant(Constants.globalFrame.Start.Value);
+                            method.StoreLocal(correction);
+                            method.Branch(handlingReg);
 
-                            method.MarkLabel(sourceLocal);
+                            method.MarkLabel(localTarget);
+                            method.LoadLocal(stkHd);
+                            method.LoadConstant(1);
+                            method.Subtract();
+                            method.LoadConstant(Constants.frameSize);
+                            method.Multiply();
+                            method.StoreLocal(correction);
+
+                            method.MarkLabel(handlingReg);
+
+                            method.LoadLocal(offset);
+                            method.LoadLocal(correction);
+                            method.Add();
+                            method.StoreLocal(offset);
+
                             method.LoadLocal(mem);
-
-                            method.MarkLabel(startHandling);
-                            method.LoadLocal(GetLocal(address.Number));
+                            method.LoadLocal(offset);
                             method.LoadElement<int>();
 
                             method.StoreLocal(GetLocal(target.Number));
@@ -261,25 +348,57 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Store)
+                    if (instruction.Op.OpCode == Store.OpCode)
                     {
                         if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value address && instruction.Operands[2] is Value isGlobal)
                         {
-                            Label targetLocal = method.DefineLabel();
-                            Label startHandling = method.DefineLabel();
+                            /*
+                             
+            if (Registers[isGlobalReg] != 0)
+            {
+                state.Memory[Constants.globalFrame.Start.Value + Registers[addressReg]] = Registers[Register];
+            } else
+            {
+                int offset = Registers[addressReg] + (state.Holder.Calls.Count - 1) * Constants.frameSize;
+                state.Memory[offset] = Registers[Register];
+            }
+                             */
+
+
+                            Label globalTarget = method.DefineLabel();
+                            Label localTarget = method.DefineLabel();
+                            Label handlingReg = method.DefineLabel();
+
+                            using Local offset = method.DeclareLocal<int>();
+                            using Local correction = method.DeclareLocal<int>();
+                            method.LoadLocal(GetLocal(address.Number));
+                            method.StoreLocal(offset);
 
                             method.LoadLocal(GetLocal(isGlobal.Number));
                             method.LoadConstant(0);
-                            method.BranchIfEqual(targetLocal);
+                            method.BranchIfEqual(localTarget);
 
-                            method.LoadArgument(0);
-                            method.Branch(startHandling);
+                            method.LoadConstant(Constants.globalFrame.Start.Value);
+                            method.StoreLocal(correction);
+                            method.Branch(handlingReg);
 
-                            method.MarkLabel(targetLocal);
+                            method.MarkLabel(localTarget);
+                            method.LoadLocal(stkHd);
+                            method.LoadConstant(1);
+                            method.Subtract();
+                            method.LoadConstant(Constants.frameSize);
+                            method.Multiply();
+                            method.StoreLocal(correction);
+
+                            method.MarkLabel(handlingReg);
+
+                            method.LoadLocal(offset);
+                            method.LoadLocal(correction);
+                            method.Add();
+                            method.StoreLocal(offset);
+
                             method.LoadLocal(mem);
-
-                            method.MarkLabel(startHandling);
-                            method.LoadLocal(GetLocal(address.Number));
+                            method.LoadLocal(offset);
                             method.LoadLocal(GetLocal(source.Number));
                             method.StoreElement<int>();
                         }
@@ -290,7 +409,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Dup)
+                    if (instruction.Op.OpCode == Dup.OpCode)
                     {
                         if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value destination)
                         {
@@ -304,7 +423,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Gt)
+                    if (instruction.Op.OpCode == Gt.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -320,7 +439,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Lt)
+                    if (instruction.Op.OpCode == Lt.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -336,7 +455,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Eq)
+                    if (instruction.Op.OpCode == Eq.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -352,7 +471,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Mod)
+                    if (instruction.Op.OpCode == Mod.OpCode)
                     {
                         if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
                         {
@@ -368,19 +487,46 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Call)
+                    if (instruction.Op.OpCode == Call.OpCode)
                     {
-                        throw new UnsupportedCommandException("CALL");
+                        if (instruction.Operands[0] is Value target)
+                        {
+                            method.LoadLocal(cllstk);
+                            method.LoadLocal(stkHd);
+                            method.LoadConstant(target.Number);
+                            method.StoreElement<int>();
+
+                            method.LoadLocal(stkHd);
+                            method.LoadConstant(1);
+                            method.Add();
+                            method.StoreLocal(stkHd);
+
+                            method.Branch(labels[target.Number]);
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
                         continue;
                     }
 
-                    if (instruction.Op == Ret)
+                    if (instruction.Op.OpCode == Ret.OpCode)
                     {
-                        method.Return();
+                        method.LoadLocal(cllstk);
+                        method.LoadLocal(stkHd);
+                        method.LoadConstant(1);
+                        method.Subtract();
+                        method.Duplicate();
+                        method.StoreLocal(stkHd);
+
+                        method.LoadElement<int>();
+                        method.StoreLocal(currTrjt);
+
+                        method.Branch(returnTable);
                         continue;
                     }
 
-                    if (instruction.Op == Swap)
+                    if (instruction.Op.OpCode == Swap.OpCode)
                     {
                         if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value destination)
                         {
@@ -396,7 +542,7 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op == Halt)
+                    if (instruction.Op.OpCode == Halt.OpCode)
                     {
                         method.Return();
                         continue;
@@ -405,9 +551,20 @@ namespace iLang.Compilers.RegisterTarget
                     throw new Exception($"Unknown instruction {instruction.Op}");
                 }
 
-
-
                 method.Return();
+                method.MarkLabel(returnTable);
+
+                foreach(var functionLabels in functions)
+                {
+                    method.LoadLocal(currTrjt);
+                    method.LoadConstant(functionLabels.Key);
+                    method.BranchIfEqual(functionLabels.Value.Item2);
+                }
+
+                method.LoadConstant("Function not found");
+                method.NewObject<Exception, string>();
+                method.Throw();
+
                 return method.CreateMethod();
             }
         }
@@ -421,7 +578,20 @@ namespace iLang.Compilers.RegisterTarget
         private const int cjc = 4;
         private const int cjo = 6;
         private const int mof = 7;
-
+        
+        private static HashSet<string> TreeShaking(Dictionary<string, Bytecode<Registers>> functions, string function, HashSet<string> acc)
+        {
+            if (acc.Contains(function)) return acc;
+            acc.Add(function);
+            foreach (var instruction in functions[function].Instruction)
+            {
+                if (instruction.Op == Call && instruction.Operands[0] is FunctionName functionName)
+                {
+                    TreeShaking(functions, functionName.atom, acc);
+                }
+            }
+            return acc;
+        }
 
         private class FunctionContext() : Context<Registers>(System.String.Empty)
         {
@@ -440,16 +610,18 @@ namespace iLang.Compilers.RegisterTarget
                 functionOffsets["Main"] = 6;
                 MachineCode.AddRange(Functions["Main"]);
 
+                var calledFunctions = TreeShaking(Functions, "Main", []);
+
                 foreach (var function in Functions)
                 {
-                    if (function.Key == "Main") continue;
+                    if (function.Key == "Main" || !calledFunctions.Contains(function.Key)) continue;
                     functionOffsets[function.Key] = MachineCode.Size;
                     MachineCode.AddRange(function.Value);
                 }
 
                 foreach (var instruction in MachineCode.Instruction)
                 {
-                    if (instruction.Op == Call && instruction.Operands[0] is Placeholder placeholder)
+                    if (instruction.Op == Call && instruction.Operands[0] is FunctionName placeholder)
                     {
                         if (!functionOffsets.ContainsKey(placeholder.atom))
                         {
@@ -458,13 +630,12 @@ namespace iLang.Compilers.RegisterTarget
                         instruction.Operands[0] = functionOffsets[placeholder.atom];
                     }
                 }
-                
 
                 return MachineCode.Instruction.SelectMany<Opcode<Registers>, byte>(x => {
-                    if(x.Op.Name == Mov.Name)
+                    if(x.Op.Name == Mov.Name || x.Op.Name == CJump.Name)
                     {
                         return [ x.Op.OpCode, (Byte)((Value)x.Operands[0]).Number, .. BitConverter.GetBytes(((Value)x.Operands[1]).Number) ];
-                    } else if (x.Op.Name == Call.Name)
+                    } else if (x.Op.Name == Call.Name || x.Op.Name == Jump.Name)
                     {
                         return [x.Op.OpCode, .. BitConverter.GetBytes(((Value)x.Operands[0]).Number)];
                     }
@@ -502,7 +673,8 @@ namespace iLang.Compilers.RegisterTarget
 
         private static void CompileCall(CallExpr call, Context<Registers> context, FunctionContext functionContext)
         {
-            
+            var calledFuncName = Tools.Mangle(functionContext.CurrentNamespace, call.Function);
+
             // very very very bad workaround
             int argumentMemoryLocation = 0;
             foreach (var arg in call.Args.Items)
@@ -515,7 +687,7 @@ namespace iLang.Compilers.RegisterTarget
                 argumentMemoryLocation += 1;
             }
 
-            context.Bytecode.Add(Call, Tools.Mangle(functionContext.CurrentNamespace, call.Function));
+            context.Bytecode.Add(Call, calledFuncName);
         }
 
         private static void CompileBinaryOp(BinaryOp binaryOp, Context<Registers> context, FunctionContext functionContext)
@@ -643,14 +815,11 @@ namespace iLang.Compilers.RegisterTarget
             context.Bytecode.Add(Mov, ebx, 0);
             context.Bytecode.Add(Eq, cjc, eax, ebx);
 
-            context.Bytecode.Add(Mov, cjo, bodySlice.Size + 8); // 6
-            context.Bytecode.Add(CJump, cjc, cjo); // 3
+            context.Bytecode.Add(CJump, cjc, bodySlice.Size + 5); // 3
              
             CompileBlock(loop.Body, context, functionContext);
             
-            int jumpBack = 6 + 2 + context.Bytecode.Size - loopStart;
-            context.Bytecode.Add(Mov, cjo, -jumpBack); // 6
-            context.Bytecode.Add(Jump, cjo); // 2
+            context.Bytecode.Add(Jump, -(5 + context.Bytecode.Size - loopStart)); // 2
         }
 
         private static void CompileBlock(Block block, Context<Registers> context, FunctionContext functionContext)
@@ -726,13 +895,11 @@ namespace iLang.Compilers.RegisterTarget
             CompileBlock(conditional.False, snapshot2, functionContext);
             var falseSlice = new Bytecode<Registers>(snapshot2.Bytecode.Instruction[context.Bytecode.Instruction.Count..]);
 
-            context.Bytecode.Add(Mov, cjo, falseSlice.Size + 8); // 6
-            context.Bytecode.Add(CJump, eax, cjo); // 3
+            context.Bytecode.Add(CJump, eax, falseSlice.Size + 5); // 3
 
             CompileBlock(conditional.False, context, functionContext);
 
-            context.Bytecode.Add(Mov, cjo, trueSlice.Size); // 6
-            context.Bytecode.Add(Jump, cjo); // 2
+            context.Bytecode.Add(Jump, trueSlice.Size); // 2
 
             CompileBlock(conditional.True, context, functionContext);
 
@@ -803,7 +970,6 @@ namespace iLang.Compilers.RegisterTarget
                     throw new Exception($"Unknown tree type {tree.GetType()}");
                 }
             }
-
             return functionContext.Collapse();
         }
     }
