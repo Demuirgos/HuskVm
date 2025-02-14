@@ -155,6 +155,8 @@ public static class Instructions {
             var Registers = state.Holder;
             var offset = BitConverter.ToInt32(state.Program.AsSpan(state.ProgramCounter, 4));
             state.ProgramCounter += 4 + offset;
+
+            Console.WriteLine($"Jumping to {state.ProgramCounter}");
             return vm;
         }
     }
@@ -172,6 +174,9 @@ public static class Instructions {
             if (Registers[condition] != 0) {
                 state.ProgramCounter += offset;
             }
+
+            Console.WriteLine($"Jumping to {state.ProgramCounter}");
+
             return vm;
         }
     }

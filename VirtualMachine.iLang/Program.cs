@@ -128,8 +128,7 @@ object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationU
     if (shouldAot)
     {
         var methodInfo = iLang.Compilers.RegisterTarget.Compiler.ToClr.ToMethodInfo(program_r);
-        methodInfo.Invoke(null, []);
-        return null;
+        return methodInfo();
     }
 
     IVirtualMachine<Registers> vm_r = new VirtualMachine.Example.Register.VirtualMachine();

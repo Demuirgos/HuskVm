@@ -8,18 +8,21 @@ using System.Reflection;
 using Sigil;
 using VirtualMachine.Instruction;
 using Microsoft.Diagnostics.NETCore.Client;
+using Microsoft.Diagnostics.Runtime;
+using System.Collections;
 namespace iLang.Compilers.RegisterTarget
 {
     public static class Compiler
     {
         public static class ToClr
         {
-            internal static Bytecode<Registers> Simplify(Emit<Action<byte[]>> method, byte[] bytecode, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label)> functions)
+            internal static Bytecode<Registers> Simplify(Emit<Func<int>> method, byte[] bytecode, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label)> functions)
             {
                 labels = new();
                 functions = new();
                 var instructionMap = InstructionSet<Registers>.Opcodes.ToDictionary(instructions => instructions.OpCode);
                 Bytecode<Registers> simplifiedBytecode = new([]);
+
                 for (int j = 0; j < bytecode.Length; j++)
                 {
                     var index = j;
@@ -38,6 +41,8 @@ namespace iLang.Compilers.RegisterTarget
                         j += metadata.ImmediateSizes[k];
                     }
 
+                    simplifiedBytecode.Add(instruction, operands);
+
                     if (instruction.OpCode == Call.OpCode)
                     {
                         if (operands[0] is Value value)
@@ -55,33 +60,112 @@ namespace iLang.Compilers.RegisterTarget
                     {
                         if (operands[0] is Value value)
                         {
-                            labels.TryAdd(value.Number + index + 4 + 1, method.DefineLabel());
+                            int target = index + 4 + value.Number;
+
+                            Console.WriteLine($"Jump to {target}");
+                            labels.TryAdd(target, method.DefineLabel());
                         }
                     }
 
                     if (instruction.OpCode == CJump.OpCode)
                     {
+                        int falloff = index + 4 + 1 + 1;
+                        labels.TryAdd(falloff, method.DefineLabel());
+
+
                         if (operands[1] is Value value)
                         {
-                            labels.TryAdd(value.Number + index + 4 + 1 + 1, method.DefineLabel());
-                        }
+                            int target = index + 1 + 4 + 1 + value.Number;
 
-                        labels.TryAdd(index + 4 + 1 + 1, method.DefineLabel());
+                            Console.WriteLine($"CJump to {target}");
+                            labels.TryAdd(target, method.DefineLabel());
+                        }
                     }
-                    simplifiedBytecode.Add(instruction, operands);
                 }
 
                 return simplifiedBytecode;
             }
 
-            public static MethodInfo ToMethodInfo(byte[] bytecodeInput)
+            internal static bool[] DeadcodeAnalysis(Bytecode<Registers> bytecode)
             {
-                Emit<Action<byte[]>> method = Emit<Action<byte[]>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
+                Queue<int> jumpStack = new Queue<int>([0]);
+                bool[] reachabilityAnalysis = new bool[bytecode.Instruction.Count];
+
+                int bytecodeSize = bytecode.Size;
+
+                while (jumpStack.TryDequeue(out int pc))
+                {
+                    for (int j = pc; j < bytecodeSize;)
+                    {
+                        int index = bytecode.Index(j);
+                        var metadata = bytecode.Instruction[index];
+                        var instruction = metadata.Op;
+                        var operands = metadata.Operands;
+
+
+                        Console.WriteLine($"Analyzing {metadata}");
+
+                        reachabilityAnalysis[index] = true;
+
+                        if (instruction.OpCode == Call.OpCode)
+                        {
+                            if (operands[0] is Value value)
+                            {
+                                jumpStack.Enqueue(j + 4 + 1);
+                                jumpStack.Enqueue(value.Number);
+
+                                break;
+                            }
+                        }
+
+                        if (instruction.OpCode == Jump.OpCode)
+                        {
+                            if (operands[0] is Value value)
+                            {
+                                int target = j + 4 + value.Number;
+
+                                jumpStack.Enqueue(target);
+                            }
+
+                            break;
+                        }
+
+                        if (instruction.OpCode == CJump.OpCode)
+                        {
+                            int falloff = j + 4 + 1 + 1;
+                            jumpStack.Enqueue(falloff);
+
+                            if (operands[1] is Value value)
+                            {
+                                int target = j + 1 + 4 + 1 + value.Number;
+                                jumpStack.Enqueue(target);
+                            }
+
+                            break;
+                        }
+
+                        if (instruction.OpCode == Ret.OpCode || instruction.OpCode == Halt.OpCode)
+                        {
+                            break;
+                        }
+
+                        j += metadata.Op.Size;
+                    }
+                }
+
+                return reachabilityAnalysis;
+            }
+
+            public static Func<int> ToMethodInfo(byte[] bytecodeInput)
+            {
+                Emit<Func<int>> method = Emit<Func<int>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
 
                 Label returnTable = method.DefineLabel();
+                Label exitLabel = method.DefineLabel();
 
                 var bytecode = Simplify(method, bytecodeInput, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label) > functions);
-
+                var reachabilityAnalysis = DeadcodeAnalysis(bytecode);
+                
                 using Local eax = method.DeclareLocal<int>("eax");
                 using Local ebx = method.DeclareLocal<int>("ebx");
                 using Local ecx = method.DeclareLocal<int>("ecx");
@@ -92,10 +176,18 @@ namespace iLang.Compilers.RegisterTarget
                 using Local cjo = method.DeclareLocal<int>("cjo");
                 using Local mof = method.DeclareLocal<int>("mof");
 
+                /*
+                using Local regDump = method.DeclareLocal<int[]>("regDump");
+                method.LoadConstant(4);
+                method.NewArray<int>();
+                method.StoreLocal(regDump);
+                */
+
                 using Local mem = method.DeclareLocal<int[]>("mem");
                 method.LoadConstant(1024);
                 method.NewArray<int>();
                 method.StoreLocal(mem);
+
 
                 using Local cllstk = method.DeclareLocal<int[]>("cllstk");
                 using Local stkHd = method.DeclareLocal<int>("stkHd");
@@ -123,11 +215,28 @@ namespace iLang.Compilers.RegisterTarget
                 {
                     var instruction = bytecode.Instruction[i];
                     int pc = bytecode.Pc(i);
+
+
+                    if (!reachabilityAnalysis[i])
+                    {
+                        Console.WriteLine($"{pc}: {instruction} (Deadcode)");
+                        continue;
+                    }
+
                     Console.WriteLine($"{pc}: {instruction}");
                     if (labels.ContainsKey(pc))
                     {
                         method.MarkLabel(labels[pc]);
                     }
+
+
+                    using Local traceLine = method.DeclareLocal<string>("traceLine");
+                    method.LoadConstant($"{pc}: {instruction}");
+                    method.StoreLocal(traceLine);
+                    method.LoadLocal(traceLine);
+                    method.Call(typeof(Console).GetMethod("WriteLine", [typeof(string)]));
+                    method.LoadLocal(eax);
+                    method.Call(typeof(Console).GetMethod("WriteLine", [typeof(int)]));
 
                     if (instruction.Op.OpCode == Mov.OpCode)
                     {
@@ -275,7 +384,7 @@ namespace iLang.Compilers.RegisterTarget
                     {
                         if (instruction.Operands[0] is Value target)
                         {
-                            method.Branch(labels[pc + 1 + 4 + target.Number]);
+                            method.Branch(labels[pc + 4 + target.Number]);
                         }
                         else
                         {
@@ -544,12 +653,30 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Halt.OpCode)
                     {
-                        method.Return();
+                        method.Branch(exitLabel);
                         continue;
                     }
 
                     throw new Exception($"Unknown instruction {instruction.Op}");
                 }
+
+                method.MarkLabel(exitLabel);
+
+                // dump all 4 registers
+
+                /*for(int i = 0; i < 4; i++)
+                {
+                    method.LoadLocal(regDump);
+                    method.LoadConstant(i);
+                    method.LoadLocal(GetLocal(i));
+                    method.StoreElement<int>();
+                }
+                
+                method.LoadLocal(regDump);
+                */
+
+
+                method.LoadLocal(eax);
 
                 method.Return();
                 method.MarkLabel(returnTable);
@@ -565,7 +692,7 @@ namespace iLang.Compilers.RegisterTarget
                 method.NewObject<Exception, string>();
                 method.Throw();
 
-                return method.CreateMethod();
+                return method.CreateDelegate();
             }
         }
 

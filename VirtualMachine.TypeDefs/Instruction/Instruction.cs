@@ -8,6 +8,19 @@ namespace VirtualMachine.Instruction
     public abstract class Instruction<T> 
     {
         public string Name => GetType().Name;
+        public int Size
+        {
+            get
+            {
+                var metadata = this.GetType().GetCustomAttribute<MetadataAttribute>();
+                int count = 1;
+                for (int k = 0; k < metadata.ImmediateSizes.Length; k++)
+                {
+                    count += metadata.ImmediateSizes[k];
+                }
+                return count;
+            }
+        }
         public abstract byte OpCode { get; }
         public abstract IVirtualMachine<T> Apply(IVirtualMachine<T> vm);
     }

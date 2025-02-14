@@ -50,6 +50,7 @@ namespace VirtualMachine.iLang.Compilers
         public void RemoveRange(int start, int count) => Instruction.RemoveRange(start, count);
         public void RemoveRange(int start) => Instruction.RemoveRange(start, Instruction.Count - start);
 
+        // terribly bad code
         public int Pc(int index) => Instruction[..index].Sum(x => {
             // get Metadata attribute from instuction
             var metadata = x.Op.GetType().GetCustomAttribute<MetadataAttribute>();
@@ -57,6 +58,11 @@ namespace VirtualMachine.iLang.Compilers
             return opcodeSize;
         });
 
+        // terribly bad code
+        public int Index(int pc) => Instruction
+            .Select((x, index) => (Pc(index) == pc, index))
+            .First(x => x.Item1)
+            .index;
         public int Size => Instruction.Sum(x => {
             // get Metadata attribute from instuction
             var metadata = x.Op.GetType().GetCustomAttribute<MetadataAttribute>();
