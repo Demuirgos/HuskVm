@@ -7,7 +7,7 @@ using VirtualMachine.Processor;
 namespace VirtualMachine.Example.Stack;
 public static class Instructions {
 
-    [Metadata(1, 0, 4)]
+    [Metadata(0, 1, 4)]
     public partial class Push : Instruction<Stacks> {
         public override byte OpCode { get; } = 0x01;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
@@ -21,7 +21,7 @@ public static class Instructions {
         }
     }
 
-    [Metadata(0, 1)]
+    [Metadata(1, 0)]
     public partial class Pop : Instruction<Stacks> {
         public override byte OpCode { get; } = 0x02;
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {

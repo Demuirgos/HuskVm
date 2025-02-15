@@ -2,7 +2,7 @@
   "profiles": {
     "VirtualMachine.iLang": {
       "commandName": "Project",
-      "commandLineArgs": "main.il -cr -d -aot"
+      "commandLineArgs": "main.il -cs -d -aot"
     },
     "WSL": {
       "commandName": "WSL2",

@@ -12,16 +12,17 @@ namespace VirtualMachine.Instruction
         {
             get
             {
-                var metadata = this.GetType().GetCustomAttribute<MetadataAttribute>();
                 int count = 1;
-                for (int k = 0; k < metadata.ImmediateSizes.Length; k++)
+                for (int k = 0; k < Metadata.ImmediateSizes.Length; k++)
                 {
-                    count += metadata.ImmediateSizes[k];
+                    count += Metadata.ImmediateSizes[k];
                 }
                 return count;
             }
         }
         public abstract byte OpCode { get; }
+
+        public MetadataAttribute Metadata => GetType().GetCustomAttribute<MetadataAttribute>();
         public abstract IVirtualMachine<T> Apply(IVirtualMachine<T> vm);
     }
 

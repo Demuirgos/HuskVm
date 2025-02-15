@@ -155,8 +155,7 @@ object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit
     if (shouldAot)
     {
         var methodInfo = iLang.Compilers.StacksCompiler.Compiler.ToClr.ToMethodInfo(program_s);
-        methodInfo.Invoke(null, []);
-        return null;
+        return methodInfo();
     }
 
     IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();

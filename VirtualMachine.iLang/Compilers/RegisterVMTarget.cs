@@ -60,7 +60,7 @@ namespace iLang.Compilers.RegisterTarget
                     {
                         if (operands[0] is Value value)
                         {
-                            int target = index + 4 + value.Number;
+                            int target = index + 4 + 1 + value.Number;
 
                             Console.WriteLine($"Jump to {target}");
                             labels.TryAdd(target, method.DefineLabel());
@@ -93,10 +93,19 @@ namespace iLang.Compilers.RegisterTarget
 
                 int bytecodeSize = bytecode.Size;
 
+                HashSet<int> visited = new();
+
                 while (jumpStack.TryDequeue(out int pc))
                 {
+                    if (visited.Contains(pc))
+                    {
+                        continue;
+                    }
+
                     for (int j = pc; j < bytecodeSize;)
                     {
+                        visited.Add(pc);
+
                         int index = bytecode.Index(j);
                         var metadata = bytecode.Instruction[index];
                         var instruction = metadata.Op;
@@ -122,7 +131,7 @@ namespace iLang.Compilers.RegisterTarget
                         {
                             if (operands[0] is Value value)
                             {
-                                int target = j + 4 + value.Number;
+                                int target = j + 4 + 1 + value.Number;
 
                                 jumpStack.Enqueue(target);
                             }
@@ -384,7 +393,7 @@ namespace iLang.Compilers.RegisterTarget
                     {
                         if (instruction.Operands[0] is Value target)
                         {
-                            method.Branch(labels[pc + 4 + target.Number]);
+                            method.Branch(labels[pc + 4 + 1 + target.Number]);
                         }
                         else
                         {
@@ -411,7 +420,6 @@ namespace iLang.Compilers.RegisterTarget
                     {
                         if (instruction.Operands[0] is Value target && instruction.Operands[1] is Value address && instruction.Operands[2] is Value isGlobal)
                         {
-
                             Label globalTarget = method.DefineLabel();
                             Label localTarget = method.DefineLabel();
                             Label handlingReg = method.DefineLabel();
@@ -461,19 +469,6 @@ namespace iLang.Compilers.RegisterTarget
                     {
                         if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value address && instruction.Operands[2] is Value isGlobal)
                         {
-                            /*
-                             
-            if (Registers[isGlobalReg] != 0)
-            {
-                state.Memory[Constants.globalFrame.Start.Value + Registers[addressReg]] = Registers[Register];
-            } else
-            {
-                int offset = Registers[addressReg] + (state.Holder.Calls.Count - 1) * Constants.frameSize;
-                state.Memory[offset] = Registers[Register];
-            }
-                             */
-
-
                             Label globalTarget = method.DefineLabel();
                             Label localTarget = method.DefineLabel();
                             Label handlingReg = method.DefineLabel();
@@ -596,6 +591,22 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
+                    if (instruction.Op.OpCode == Swap.OpCode)
+                    {
+                        if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value destination)
+                        {
+                            method.LoadLocal(GetLocal(source.Number));
+                            method.LoadLocal(GetLocal(destination.Number));
+                            method.StoreLocal(GetLocal(source.Number));
+                            method.StoreLocal(GetLocal(destination.Number));
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid operands");
+                        }
+                        continue;
+                    }
+
                     if (instruction.Op.OpCode == Call.OpCode)
                     {
                         if (instruction.Operands[0] is Value target)
@@ -635,22 +646,6 @@ namespace iLang.Compilers.RegisterTarget
                         continue;
                     }
 
-                    if (instruction.Op.OpCode == Swap.OpCode)
-                    {
-                        if (instruction.Operands[0] is Value source && instruction.Operands[1] is Value destination)
-                        {
-                            method.LoadLocal(GetLocal(source.Number));
-                            method.LoadLocal(GetLocal(destination.Number));
-                            method.StoreLocal(GetLocal(source.Number));
-                            method.StoreLocal(GetLocal(destination.Number));
-                        }
-                        else
-                        {
-                            throw new Exception("Invalid operands");
-                        }
-                        continue;
-                    }
-
                     if (instruction.Op.OpCode == Halt.OpCode)
                     {
                         method.Branch(exitLabel);
@@ -661,26 +656,10 @@ namespace iLang.Compilers.RegisterTarget
                 }
 
                 method.MarkLabel(exitLabel);
-
-                // dump all 4 registers
-
-                /*for(int i = 0; i < 4; i++)
-                {
-                    method.LoadLocal(regDump);
-                    method.LoadConstant(i);
-                    method.LoadLocal(GetLocal(i));
-                    method.StoreElement<int>();
-                }
-                
-                method.LoadLocal(regDump);
-                */
-
-
                 method.LoadLocal(eax);
-
                 method.Return();
-                method.MarkLabel(returnTable);
 
+                method.MarkLabel(returnTable);
                 foreach(var functionLabels in functions)
                 {
                     method.LoadLocal(currTrjt);
