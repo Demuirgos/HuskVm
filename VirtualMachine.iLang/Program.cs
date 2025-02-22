@@ -63,7 +63,7 @@ if (args.Length < 2)
 }
 
 var tokens = args.Select(s => s.Replace("-", string.Empty)).ToList();
-string[] modes = ["i", "cr", "cs", "p"];
+string[] modes = ["i", "clr", "cr", "cs", "p"];
 
 var mode = tokens.Find(word => modes.Contains(word));
 var filePath = args[0];
@@ -105,6 +105,7 @@ object result = mode switch
     "i" => InterpreterRun(watch, function),
     "cr" => RegisterRun(watch, function),
     "cs" => StackRun(watch, function),
+    "clr" => dotnetRun(watch, function),
     _ => throw new Exception("Invalid mode")
 };
 
@@ -161,14 +162,21 @@ object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit
     IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
     vm_s.LoadProgram(program_s);
 
-    if(shouldTrace)
+    if (shouldTrace)
     {
         vm_s.Trace(tracer_s, watch);
-    } else
+    }
+    else
     {
         vm_s.Run(watch);
     }
 
     return vm_s.State.Holder.Operands.LastOrDefault();
+}
+object dotnetRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
+{
+    Func<double> program_c = iLang.Compilers.CLRTarget.Compile(function, logILCode: shouldDisassemble);
+    var result =  program_c();
+    return result;
 }
 #endif
