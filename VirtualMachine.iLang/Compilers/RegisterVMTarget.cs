@@ -251,8 +251,6 @@ namespace iLang.Compilers.RegisterTarget
                     _ => throw new Exception($"Unknown register {index}")
                 };
 
-                Console.WriteLine("===================================================================");
-
                 for (int i = 0; i < bytecode.Instruction.Count; i++)
                 {
                     var instruction = bytecode.Instruction[i];

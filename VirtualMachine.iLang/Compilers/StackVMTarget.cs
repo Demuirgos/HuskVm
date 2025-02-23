@@ -61,7 +61,6 @@ namespace iLang.Compilers.StacksCompiler
                         {
                             int target = index + 4 + 1 + value.Number;
 
-                            Console.WriteLine($"Jump to {target}");
                             labels.TryAdd(target, method.DefineLabel());
                         }
                     }
@@ -76,7 +75,6 @@ namespace iLang.Compilers.StacksCompiler
                         {
                             int target = index + 4 + 1 + value.Number;
 
-                            Console.WriteLine($"CJump to {target}");
                             labels.TryAdd(target, method.DefineLabel());
                         }
                     }
@@ -111,10 +109,6 @@ namespace iLang.Compilers.StacksCompiler
                         var metadata = bytecode.Instruction[index];
                         var instruction = metadata.Op;
                         var operands = metadata.Operands;
-
-
-                        Console.WriteLine($"Analyzing {metadata}");
-
                         reachabilityAnalysis[index] = true;
 
                         if (instruction.OpCode == Call.OpCode)
@@ -560,8 +554,6 @@ namespace iLang.Compilers.StacksCompiler
                 method.Throw();
 
                 var function = method.CreateDelegate(out string code);
-
-                Console.WriteLine(code);
                 return function;
             }
         }

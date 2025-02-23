@@ -1,7 +1,8 @@
-﻿//#define BENCHMARK
+﻿#define BENCHMARK
 #if BENCHMARK
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
+using iLang.Compilers;
 using iLang.Interpreter;
 using iLang.Parsers;
 using iLang.SyntaxDefinitions;
@@ -22,7 +23,12 @@ public class VirtualMachineWar
     private byte[] registerBytes;
     private byte[] stackBytes;
     IVirtualMachine<Registers> vm_r = new VirtualMachine.Example.Register.VirtualMachine();
+    Func<bool, int> vm_r_aot;
+    
     IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
+    Func<bool, int> vm_s_aot;
+
+    Func<double> clr_target;
 
     public VirtualMachineWar()
     {
@@ -30,16 +36,29 @@ public class VirtualMachineWar
         Parsers.ParseCompilationUnit(code, out compilationUnit);
         registerBytes = iLang.Compilers.RegisterTarget.Compiler.Compile(compilationUnit);
         stackBytes = iLang.Compilers.StacksCompiler.Compiler.Compile(compilationUnit);
+        clr_target = iLang.Compilers.CLRTarget.Compile(compilationUnit);
+
+        vm_r_aot = iLang.Compilers.RegisterTarget.Compiler.ToClr.ToMethodInfo(registerBytes);
+        vm_s_aot = iLang.Compilers.StacksCompiler.Compiler.ToClr.ToMethodInfo(stackBytes);
     }
 
     [Benchmark]
-    public IVirtualMachine<Registers> RegisterVm() => vm_r.LoadProgram(registerBytes).Run(NullTimer<Stopwatch>.Instance);
+    public IVirtualMachine<Registers> RegisterVmNormal() => vm_r.LoadProgram(registerBytes).Run(NullTimer<Stopwatch>.Instance);
+
+    [Benchmark]
+    public int RegisterVmAot() => vm_r_aot(false);
 
     [Benchmark]
     public IVirtualMachine<Stacks> StackVm() => vm_s.LoadProgram(stackBytes).Run(NullTimer<Stopwatch>.Instance);
 
     [Benchmark]
+    public int StackVmAot() => vm_s_aot(false);
+
+    [Benchmark]
     public Value InterpreterVm() => Interpreter.Interpret(compilationUnit, NullTimer<Stopwatch>.Instance);
+
+    [Benchmark]
+    public double ClrTargetMethod() => clr_target();
 }
 #else
 using iLang.Compilers;
