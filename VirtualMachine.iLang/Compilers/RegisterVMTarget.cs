@@ -12,6 +12,7 @@ using Microsoft.Diagnostics.Runtime;
 using System.Collections;
 using System.Diagnostics;
 using Microsoft.Diagnostics.Tracing.StackSources;
+using System.Buffers;
 namespace iLang.Compilers.RegisterTarget
 {
     public static class Compiler
@@ -226,15 +227,15 @@ namespace iLang.Compilers.RegisterTarget
                 using Local mof = method.DeclareLocal<int>("mof");
 
                 using Local mem = method.DeclareLocal<int[]>("mem");
+                method.Call(typeof(ArrayPool<int>).GetProperty(nameof(ArrayPool<int>.Shared), BindingFlags.Static | BindingFlags.Public).GetMethod);
                 method.LoadConstant(1024);
-                method.NewArray<int>();
+                method.CallVirtual(typeof(ArrayPool<int>).GetMethod(nameof(ArrayPool<int>.Rent)));
                 method.StoreLocal(mem);
-
 
                 using Local cllstk = method.DeclareLocal<int[]>("cllstk");
                 using Local stkHd = method.DeclareLocal<int>("stkHd");
                 using Local currTrjt = method.DeclareLocal<int>("currTrjt");
-                method.LoadConstant(1024);
+                method.LoadConstant(32);
                 method.NewArray<int>();
                 method.StoreLocal(cllstk);
 
@@ -675,6 +676,12 @@ namespace iLang.Compilers.RegisterTarget
                 }
 
                 method.MarkLabel(exitLabel);
+
+                method.Call(typeof(ArrayPool<int>).GetProperty(nameof(ArrayPool<int>.Shared), BindingFlags.Static | BindingFlags.Public).GetMethod);
+                method.LoadLocal(mem);
+                method.LoadConstant(false);
+                method.CallVirtual(typeof(ArrayPool<int>).GetMethod(nameof(ArrayPool<int>.Return)));
+
                 method.LoadLocal(eax);
                 method.Return();
 

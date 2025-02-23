@@ -15,7 +15,8 @@ using Number = iLang.SyntaxDefinitions.Number;
 using System.ComponentModel;
 using System.Net;
 using VirtualMachine.Example;
-namespace iLang.Compilers.StacksCompiler
+using System.Buffers;
+namespace iLang.Compilers.StacksTarget
 {
     public static class Compiler
     {
@@ -247,14 +248,15 @@ namespace iLang.Compilers.StacksCompiler
                 var reachabilityAnalysis = DeadcodeAnalysis(bytecode);
 
                 using Local mem = method.DeclareLocal<int[]>("mem");
+                method.Call(typeof(ArrayPool<int>).GetProperty(nameof(ArrayPool<int>.Shared), BindingFlags.Static | BindingFlags.Public).GetMethod);
                 method.LoadConstant(1024);
-                method.NewArray<int>();
+                method.CallVirtual(typeof(ArrayPool<int>).GetMethod(nameof(ArrayPool<int>.Rent)));
                 method.StoreLocal(mem);
 
                 using Local cllstk = method.DeclareLocal<int[]>("cllstk");
                 using Local stkHd = method.DeclareLocal<int>("stkHd");
                 using Local currTrjt = method.DeclareLocal<int>("currTrjt");
-                method.LoadConstant(1024);
+                method.LoadConstant(32);
                 method.NewArray<int>();
                 method.StoreLocal(cllstk);
 
@@ -539,6 +541,12 @@ namespace iLang.Compilers.StacksCompiler
                 }
 
                 method.MarkLabel(exitLabel);
+
+                method.Call(typeof(ArrayPool<int>).GetProperty(nameof(ArrayPool<int>.Shared), BindingFlags.Static | BindingFlags.Public).GetMethod);
+                method.LoadLocal(mem);
+                method.LoadConstant(false);
+                method.CallVirtual(typeof(ArrayPool<int>).GetMethod(nameof(ArrayPool<int>.Return)));
+
                 method.Return();
 
                 method.MarkLabel(returnTable);

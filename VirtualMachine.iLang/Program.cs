@@ -35,27 +35,18 @@ public class VirtualMachineWar
         var code = System.IO.File.ReadAllText(FilePath);
         Parsers.ParseCompilationUnit(code, out compilationUnit);
         registerBytes = iLang.Compilers.RegisterTarget.Compiler.Compile(compilationUnit);
-        stackBytes = iLang.Compilers.StacksCompiler.Compiler.Compile(compilationUnit);
+        stackBytes = iLang.Compilers.StacksTarget.Compiler.Compile(compilationUnit);
         clr_target = iLang.Compilers.CLRTarget.Compile(compilationUnit);
 
         vm_r_aot = iLang.Compilers.RegisterTarget.Compiler.ToClr.ToMethodInfo(registerBytes);
-        vm_s_aot = iLang.Compilers.StacksCompiler.Compiler.ToClr.ToMethodInfo(stackBytes);
+        vm_s_aot = iLang.Compilers.StacksTarget.Compiler.ToClr.ToMethodInfo(stackBytes);
     }
-
-    [Benchmark]
-    public IVirtualMachine<Registers> RegisterVmNormal() => vm_r.LoadProgram(registerBytes).Run(NullTimer<Stopwatch>.Instance);
 
     [Benchmark]
     public int RegisterVmAot() => vm_r_aot(false);
 
     [Benchmark]
-    public IVirtualMachine<Stacks> StackVm() => vm_s.LoadProgram(stackBytes).Run(NullTimer<Stopwatch>.Instance);
-
-    [Benchmark]
     public int StackVmAot() => vm_s_aot(false);
-
-    [Benchmark]
-    public Value InterpreterVm() => Interpreter.Interpret(compilationUnit, NullTimer<Stopwatch>.Instance);
 
     [Benchmark]
     public double ClrTargetMethod() => clr_target();
@@ -168,13 +159,13 @@ object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationU
 object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
 {
     ITracer<Stacks> tracer_s = shouldTrace ? new Tracer<Stacks>() : NullTracer<Stacks>.Instance;
-    byte[] program_s = iLang.Compilers.StacksCompiler.Compiler.Compile(function);
+    byte[] program_s = iLang.Compilers.StacksTarget.Compiler.Compile(function);
 
     if (shouldDisassemble) Console.WriteLine(AssemblyBuilder<Stacks>.Disassemble(program_s));
 
     if (shouldAot)
     {
-        var methodInfo = iLang.Compilers.StacksCompiler.Compiler.ToClr.ToMethodInfo(program_s);
+        var methodInfo = iLang.Compilers.StacksTarget.Compiler.ToClr.ToMethodInfo(program_s);
         return methodInfo(shouldTrace);
     }
 
