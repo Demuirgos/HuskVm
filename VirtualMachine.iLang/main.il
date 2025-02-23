@@ -1,3 +1,3 @@
 include["number.il" as Number];
 
-Main: Number::IsPrime(7919);
+Main: Number::IsPrime(23);

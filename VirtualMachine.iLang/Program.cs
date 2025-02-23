@@ -22,13 +22,14 @@ public class VirtualMachineWar
     private CompilationUnit compilationUnit;
     private byte[] registerBytes;
     private byte[] stackBytes;
-    IVirtualMachine<Registers> vm_r = new VirtualMachine.Example.Register.VirtualMachine();
+
+    IVirtualMachine<Registers> vm_r; 
     Func<bool, int> vm_r_aot;
-    
-    IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
+
+    IVirtualMachine<Stacks> vm_s;
     Func<bool, int> vm_s_aot;
 
-    Func<double> clr_target;
+    Func<int> clr_target;
 
     public VirtualMachineWar()
     {
@@ -42,14 +43,35 @@ public class VirtualMachineWar
         vm_s_aot = iLang.Compilers.StacksTarget.Compiler.ToClr.ToMethodInfo(stackBytes);
     }
 
-    [Benchmark]
-    public int RegisterVmAot() => vm_r_aot(false);
+    public void Ignore<T>(T value) { }
+
+    [IterationSetup]
+    public void SetupIteration()
+    {
+        vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
+        vm_s.LoadProgram(stackBytes);
+        
+        vm_r = new VirtualMachine.Example.Register.VirtualMachine();
+        vm_r.LoadProgram(registerBytes);
+    }
 
     [Benchmark]
-    public int StackVmAot() => vm_s_aot(false);
+    public void RegisterVmAot() => Ignore(vm_r_aot(false));
 
     [Benchmark]
-    public double ClrTargetMethod() => clr_target();
+    public void StackVmAot() => Ignore(vm_s_aot(false));
+
+    [Benchmark]
+    public void RegisterVmNormal() => Ignore(value: vm_r.Run());
+
+    [Benchmark]
+    public void StackVmNormal() => Ignore(value: vm_s.Run());
+
+    [Benchmark]
+    public void ClrTargetMethod() => Ignore(clr_target());
+
+    [Benchmark]
+    public void InterpreterApproach() => Ignore(Interpreter.Interpret(compilationUnit, NullTimer<Stopwatch>.Instance));
 }
 #else
 using iLang.Compilers;
@@ -150,7 +172,7 @@ object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationU
         vm_r.Trace(tracer_r, watch);
     } else
     {
-        vm_r.Run(watch);
+        vm_r.Run();
     }
 
     return vm_r.State.Holder[0];
@@ -178,14 +200,14 @@ object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit
     }
     else
     {
-        vm_s.Run(watch);
+        vm_s.Run();
     }
 
     return vm_s.State.Holder.Operands.LastOrDefault();
 }
 object dotnetRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
 {
-    Func<double> program_c = iLang.Compilers.CLRTarget.Compile(function, logILCode: shouldDisassemble);
+    Func<int> program_c = iLang.Compilers.CLRTarget.Compile(function, logILCode: shouldDisassemble);
     var result = program_c();
     return result;
 }

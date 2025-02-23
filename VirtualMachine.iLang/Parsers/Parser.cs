@@ -99,7 +99,7 @@ namespace iLang.Parsers
                 index++;
             }
             if (start == index) return Fail(code, ref index, start);
-            number = new Number(double.Parse(code[start..index]));
+            number = new Number(int.Parse(code[start..index]));
             return true;
         }
 

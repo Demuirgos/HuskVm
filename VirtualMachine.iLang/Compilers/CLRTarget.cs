@@ -62,7 +62,7 @@ namespace iLang.Compilers
         {
             Emit currentMethod = typeContext.Methods[typeContext.Current].Emitter;
 
-            currentMethod.LoadConstant(number.Value);
+            currentMethod.LoadConstant((int)number.Value);
         }
 
         private static void CompileCall(CallExpr call, GlobalEmitionContext typeContext)
@@ -216,7 +216,7 @@ namespace iLang.Compilers
         {
             Emit currentMethod = typeContext.Methods[typeContext.Current].Emitter;
             CompileExpression(returnStatement.Value, typeContext);
-            currentMethod.Convert<double>();
+            currentMethod.Convert<int>();
             currentMethod.Return();
         }
 
@@ -233,7 +233,7 @@ namespace iLang.Compilers
                 throw new Exception($"Variable {varDeclaration.Name} already declared");
             }
 
-            context.Locals[varDeclaration.Name.FullName] = context.Emitter.DeclareLocal<double>();
+            context.Locals[varDeclaration.Name.FullName] = context.Emitter.DeclareLocal<int>();
 
             CompileExpression(varDeclaration.Value, typeContext);
             context.Emitter.StoreLocal(context.Locals[varDeclaration.Name.FullName]);
@@ -326,28 +326,28 @@ namespace iLang.Compilers
             switch (functionArgs.Length)
             {
                 case 0:
-                    currentContext.Emitter.CreateDelegate<Func<double>>(out code);
+                    currentContext.Emitter.CreateDelegate<Func<int>>(out code);
                     break;
                 case 1:
-                    currentContext.Emitter.CreateDelegate<Func<double, double>>(out code);
+                    currentContext.Emitter.CreateDelegate<Func<int, int>>(out code);
                     break;
                 case 2:
-                    currentContext.Emitter.CreateDelegate<Func<double, double, double>>(out code);
+                    currentContext.Emitter.CreateDelegate<Func<int, int, int>>(out code);
                     break;
                 case 3:
-                    currentContext.Emitter.CreateDelegate<Func<double, double, double, double>>(out code);
+                    currentContext.Emitter.CreateDelegate<Func<int, int, int, int>>(out code);
                     break;
                 case 4:
-                    currentContext.Emitter.CreateDelegate<Func<double, double, double, double, double>>(out code);
+                    currentContext.Emitter.CreateDelegate<Func<int, int, int, int, int>>(out code);
                     break;
                 case 5:
-                    currentContext.Emitter.CreateDelegate<Func<double, double, double, double, double, double>>(out code);
+                    currentContext.Emitter.CreateDelegate<Func<int, int, int, int, int, int>>(out code);
                     break;
                 case 6:
-                    currentContext.Emitter.CreateDelegate<Func<double, double, double, double, double, double, double>>(out code);
+                    currentContext.Emitter.CreateDelegate<Func<int, int, int, int, int, int, int>>(out code);
                     break;
                 case 7:
-                    currentContext.Emitter.CreateDelegate<Func<double, double, double, double, double, double, double, double>>(out code);
+                    currentContext.Emitter.CreateDelegate<Func<int, int, int, int, int, int, int, int>>(out code);
                     break;
 
             }
@@ -380,7 +380,7 @@ namespace iLang.Compilers
                 {
                     Locals = new(),
                     Args = new(),
-                    Emitter = Emit.NewDynamicMethod(typeof(double), Enumerable.Range(0, argsCount).Select(_ => typeof(double)).ToArray(), mangledName)
+                    Emitter = Emit.NewDynamicMethod(typeof(int), Enumerable.Range(0, argsCount).Select(_ => typeof(int)).ToArray(), mangledName)
                 };
             }
 
@@ -414,7 +414,7 @@ namespace iLang.Compilers
             return globalCtx;
         }
 
-        public static Func<double> Compile(CompilationUnit compilationUnit, string @namespace = "", bool logILCode = false)
+        public static Func<int> Compile(CompilationUnit compilationUnit, string @namespace = "", bool logILCode = false)
         {
             var globalContext = PrepareGlobalContext(compilationUnit, @namespace);
 
@@ -453,7 +453,7 @@ namespace iLang.Compilers
                     throw new Exception($"Unknown tree type {tree.GetType()}");
                 }
             }
-            return mainEmitter!.CreateDelegate<Func<double>>();
+            return mainEmitter!.CreateDelegate<Func<int>>();
         }
     }
 }
