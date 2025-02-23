@@ -21,7 +21,7 @@ namespace iLang.Compilers.StacksCompiler
     {
         public static class ToClr
         {
-            internal static Bytecode<Stacks> Simplify(Emit<Func<int>> method, byte[] bytecode, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label)> functions)
+            internal static Bytecode<Stacks> Simplify(Emit<Func<bool, int>> method, byte[] bytecode, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label)> functions)
             {
                 labels = new();
                 functions = new();
@@ -166,7 +166,7 @@ namespace iLang.Compilers.StacksCompiler
                 return reachabilityAnalysis;
             }
 
-            internal static void EmitTrace(Emit<Func<int>> method, Opcode<Stacks> instruction, int pc, Local memory, Local stackFrame)
+            internal static void EmitTrace(Emit<Func<bool, int>> method, Opcode<Stacks> instruction, int pc, Local memory, Local stackFrame)
             {
                 using Local stackSlice = method.DeclareLocal<int[]>();
                 method.LoadConstant(instruction.Op.Metadata.ArgumentCount);
@@ -231,12 +231,6 @@ namespace iLang.Compilers.StacksCompiler
                     method.Multiply();
                     method.LoadConstant(i);
                     method.Add();
-                    method.StoreLocal(indexLcl);
-                    
-                    method.LoadLocal(indexLcl);
-                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
-
-                    method.LoadLocal(indexLcl);
                     method.LoadElement<int>();
                     method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
                     method.LoadConstant($", ");
@@ -248,9 +242,9 @@ namespace iLang.Compilers.StacksCompiler
                 method.LoadConstant("]\n");
                 method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
             }
-            public static Func<int> ToMethodInfo(byte[] bytecodeInput)
+            public static Func<bool, int> ToMethodInfo(byte[] bytecodeInput)
             {
-                Emit<Func<int>> method = Emit<Func<int>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: false, strictBranchVerification: true);
+                Emit<Func<bool, int>> method = Emit<Func<bool, int>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: false, strictBranchVerification: true);
 
                 Label returnTable = method.DefineLabel();
                 Label exitLabel = method.DefineLabel();
@@ -262,7 +256,6 @@ namespace iLang.Compilers.StacksCompiler
                 method.LoadConstant(1024);
                 method.NewArray<int>();
                 method.StoreLocal(mem);
-
 
                 using Local cllstk = method.DeclareLocal<int[]>("cllstk");
                 using Local stkHd = method.DeclareLocal<int>("stkHd");
@@ -278,25 +271,19 @@ namespace iLang.Compilers.StacksCompiler
 
                     if (!reachabilityAnalysis[i])
                     {
-                        Console.WriteLine($"{pc}: {instruction} (Deadcode)");
                         continue;
                     }
 
-                    Console.WriteLine($"{pc}: {instruction}");
                     if (labels.ContainsKey(pc))
                     {
                         method.MarkLabel(labels[pc]);
                     }
 
+                    Label skipTracing = method.DefineLabel();
+                    method.LoadArgument(0);
+                    method.BranchIfFalse(skipTracing);
                     EmitTrace(method, instruction, pc, mem, stkHd);
-
-                    if (instruction.Op.Metadata.ArgumentCount > 0)
-                    {
-                        method.Duplicate();
-                        method.Call(typeof(Console).GetMethod("WriteLine", [typeof(int)]));
-                    }
-
-
+                    method.MarkLabel(skipTracing);
 
                     if (instruction.Op.OpCode == Push.OpCode)
                     {
@@ -406,8 +393,6 @@ namespace iLang.Compilers.StacksCompiler
 
                         method.MarkLabel(localTarget);
                         method.LoadLocal(stkHd);
-                        method.LoadConstant(1);
-                        method.Subtract();
                         method.LoadConstant(Constants.frameSize);
                         method.Multiply();
                         method.StoreLocal(correction);
@@ -450,8 +435,6 @@ namespace iLang.Compilers.StacksCompiler
 
                         method.MarkLabel(localTarget);
                         method.LoadLocal(stkHd);
-                        method.LoadConstant(1);
-                        method.Subtract();
                         method.LoadConstant(Constants.frameSize);
                         method.Multiply();
                         method.StoreLocal(correction);
@@ -576,7 +559,10 @@ namespace iLang.Compilers.StacksCompiler
                 method.NewObject<Exception, string>();
                 method.Throw();
 
-                return method.CreateDelegate();
+                var function = method.CreateDelegate(out string code);
+
+                Console.WriteLine(code);
+                return function;
             }
         }
         private static HashSet<string> TreeShaking(Dictionary<string, Bytecode<Stacks>> functions, string function, HashSet<string> acc)
@@ -677,8 +663,8 @@ namespace iLang.Compilers.StacksCompiler
 
         private static void CompileBinaryOp(BinaryOp binaryOp, Context<Stacks> context, FunctionContext functionContext)
         {
-            CompileExpression(binaryOp.Right, context, functionContext);
             CompileExpression(binaryOp.Left, context, functionContext);
+            CompileExpression(binaryOp.Right, context, functionContext);
             switch (binaryOp.Op.Value)
             {
                 case '+':

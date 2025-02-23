@@ -49,7 +49,9 @@ public static class Instructions {
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
-            stack.Push(stack.Pop() - stack.Pop());
+            var first = stack.Pop();
+            var second = stack.Pop(); 
+            stack.Push(second - first);
             return vm;
         }
     }
@@ -71,7 +73,9 @@ public static class Instructions {
         public override IVirtualMachine<Stacks> Apply(IVirtualMachine<Stacks> vm) {
             var state = vm.State;
             var stack = state.Holder.Operands;
-            stack.Push(stack.Pop() / stack.Pop());
+            var first = stack.Pop();
+            var second = stack.Pop();
+            stack.Push(second / first);
             return vm;
         }
     }
@@ -216,7 +220,7 @@ public static class Instructions {
         {
             var state = vm.State;
             var stack = state.Holder.Operands;
-            stack.Push(stack.Pop() > stack.Pop() ? 1 : 0);
+            stack.Push(stack.Pop() < stack.Pop() ? 1 : 0);
             return vm;
         }
     }
@@ -229,7 +233,7 @@ public static class Instructions {
         {
             var state = vm.State;
             var stack = state.Holder.Operands;
-            stack.Push(stack.Pop() < stack.Pop() ? 1 : 0);
+            stack.Push(stack.Pop() > stack.Pop() ? 1 : 0);
             return vm;
         }
     }
@@ -255,7 +259,9 @@ public static class Instructions {
         {
             var state = vm.State;
             var stack = state.Holder.Operands;
-            stack.Push(stack.Pop() % stack.Pop());
+            var first = stack.Pop();
+            var second = stack.Pop();
+            stack.Push(second % first);
             return vm;
         }
     }

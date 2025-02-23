@@ -129,7 +129,7 @@ object RegisterRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationU
     if (shouldAot)
     {
         var methodInfo = iLang.Compilers.RegisterTarget.Compiler.ToClr.ToMethodInfo(program_r);
-        return methodInfo();
+        return methodInfo(shouldTrace);
     }
 
     IVirtualMachine<Registers> vm_r = new VirtualMachine.Example.Register.VirtualMachine();
@@ -156,7 +156,7 @@ object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit
     if (shouldAot)
     {
         var methodInfo = iLang.Compilers.StacksCompiler.Compiler.ToClr.ToMethodInfo(program_s);
-        return methodInfo();
+        return methodInfo(shouldTrace);
     }
 
     IVirtualMachine<Stacks> vm_s = new VirtualMachine.Example.Stack.VirtualMachine();
@@ -176,7 +176,7 @@ object StackRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit
 object dotnetRun(ITimer<Stopwatch> watch, iLang.SyntaxDefinitions.CompilationUnit function)
 {
     Func<double> program_c = iLang.Compilers.CLRTarget.Compile(function, logILCode: shouldDisassemble);
-    var result =  program_c();
+    var result = program_c();
     return result;
 }
 #endif

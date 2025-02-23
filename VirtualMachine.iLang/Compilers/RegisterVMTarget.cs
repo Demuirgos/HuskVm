@@ -18,7 +18,7 @@ namespace iLang.Compilers.RegisterTarget
     {
         public static class ToClr
         {
-            internal static Bytecode<Registers> Simplify(Emit<Func<int>> method, byte[] bytecode, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label)> functions)
+            internal static Bytecode<Registers> Simplify(Emit<Func<bool, int>> method, byte[] bytecode, out Dictionary<int, Label> labels, out Dictionary<int, (Label, Label)> functions)
             {
                 labels = new();
                 functions = new();
@@ -64,7 +64,6 @@ namespace iLang.Compilers.RegisterTarget
                         {
                             int target = index + 4 + 1 + value.Number;
 
-                            Console.WriteLine($"Jump to {target}");
                             labels.TryAdd(target, method.DefineLabel());
                         }
                     }
@@ -79,7 +78,6 @@ namespace iLang.Compilers.RegisterTarget
                         {
                             int target = index + 1 + 4 + 1 + value.Number;
 
-                            Console.WriteLine($"CJump to {target}");
                             labels.TryAdd(target, method.DefineLabel());
                         }
                     }
@@ -164,9 +162,8 @@ namespace iLang.Compilers.RegisterTarget
                 return reachabilityAnalysis;
             }
 
-            internal static void EmitTrace(Emit<Func<int>> method, Opcode<Registers> instruction, int pc, Local[] registers, Local memory, Local stackFrame) 
+            internal static void EmitTrace(Emit<Func<bool, int>> method, Opcode<Registers> instruction, int pc, Local[] registers, Local memory, Local stackFrame) 
             {
-
                 using Local traceLine = method.DeclareLocal<string>("traceLine");
                 method.LoadConstant($"{pc}: {instruction} ");
                 method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
@@ -180,28 +177,19 @@ namespace iLang.Compilers.RegisterTarget
                     method.LoadConstant($", ");
                     method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
                 }
-                method.LoadConstant($"], g-mem: [");
-                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
-                for (int i = Constants.globalFrame.Start.Value; i < Constants.globalFrame.Start.Value + 8; i++)
-                {
-                    method.LoadLocal(memory);
-                    method.LoadConstant(i);
-                    method.LoadElement<int>();
-                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
-                    method.LoadConstant($", ");
-                    method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
-                }
-                method.LoadConstant("]\n");
-
 
                 method.LoadConstant($"], l-mem: [");
                 method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
-                for (int i = 0; i < 8; i++)
+                Label skipIfInDriver = method.DefineLabel();
+                method.LoadLocal(stackFrame);
+                method.BranchIfFalse(skipIfInDriver);
+
+                for (int i = 0; i < Constants.frameSize; i++)
                 {
+                    using Local indexLcl = method.DeclareLocal<int>();
+
                     method.LoadLocal(memory);
                     method.LoadLocal(stackFrame);
-                    method.LoadConstant(1);
-                    method.Subtract();
                     method.LoadConstant(Constants.frameSize);
                     method.Multiply();
                     method.LoadConstant(i);
@@ -211,12 +199,15 @@ namespace iLang.Compilers.RegisterTarget
                     method.LoadConstant($", ");
                     method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
                 }
+
+                method.MarkLabel(skipIfInDriver);
+
                 method.LoadConstant("]\n");
                 method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
             }
-            public static Func<int> ToMethodInfo(byte[] bytecodeInput)
+            public static Func<bool, int> ToMethodInfo(byte[] bytecodeInput)
             {
-                Emit<Func<int>> method = Emit<Func<int>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
+                Emit<Func<bool, int>> method = Emit<Func<bool, int>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: false, strictBranchVerification: true);
 
                 Label returnTable = method.DefineLabel();
                 Label exitLabel = method.DefineLabel();
@@ -270,17 +261,19 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (!reachabilityAnalysis[i])
                     {
-                        Console.WriteLine($"{pc}: {instruction} (Deadcode)");
                         continue;
                     }
 
-                    Console.WriteLine($"{pc}: {instruction}");
                     if (labels.ContainsKey(pc))
                     {
                         method.MarkLabel(labels[pc]);
                     }
 
-                    EmitTrace(method, instruction, pc, [eax, ebx, ecx, edx], mem, stkHd);
+                    Label skipTracing = method.DefineLabel();
+                    method.LoadArgument(0);
+                    method.BranchIfFalse(skipTracing);
+                    EmitTrace(method, instruction, pc, [eax, ebx, ecx, edx, fco, cjc, cjo, mof], mem, stkHd);
+                    method.MarkLabel(skipTracing);
 
                     if (instruction.Op.OpCode == Mov.OpCode)
                     {
@@ -299,7 +292,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Add.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -315,7 +308,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Sub.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -331,7 +324,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Mul.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -347,10 +340,10 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Div.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
-                            method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
+                            method.LoadLocal(GetLocal(value1.Number));
                             method.Divide();
                             method.StoreLocal(GetLocal(destination.Number));
                         }
@@ -363,7 +356,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == And.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -379,7 +372,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Or.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -395,7 +388,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Xor.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -411,7 +404,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Not.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value && instruction.Operands[1] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value)
                         {
                             method.LoadLocal(GetLocal(value.Number));
                             method.Not();
@@ -465,8 +458,7 @@ namespace iLang.Compilers.RegisterTarget
                             method.StoreLocal(offset);
 
                             method.LoadLocal(GetLocal(isGlobal.Number));
-                            method.LoadConstant(0);
-                            method.BranchIfEqual(localTarget);
+                            method.BranchIfFalse(localTarget);
 
                             method.LoadConstant(Constants.globalFrame.Start.Value);
                             method.StoreLocal(correction);
@@ -474,8 +466,6 @@ namespace iLang.Compilers.RegisterTarget
 
                             method.MarkLabel(localTarget);
                             method.LoadLocal(stkHd);
-                            method.LoadConstant(1);
-                            method.Subtract();
                             method.LoadConstant(Constants.frameSize);
                             method.Multiply();
                             method.StoreLocal(correction);
@@ -490,7 +480,6 @@ namespace iLang.Compilers.RegisterTarget
                             method.LoadLocal(mem);
                             method.LoadLocal(offset);
                             method.LoadElement<int>();
-
                             method.StoreLocal(GetLocal(target.Number));
                         }
                         else
@@ -514,8 +503,7 @@ namespace iLang.Compilers.RegisterTarget
                             method.StoreLocal(offset);
 
                             method.LoadLocal(GetLocal(isGlobal.Number));
-                            method.LoadConstant(0);
-                            method.BranchIfEqual(localTarget);
+                            method.BranchIfFalse(localTarget);
 
                             method.LoadConstant(Constants.globalFrame.Start.Value);
                             method.StoreLocal(correction);
@@ -523,8 +511,6 @@ namespace iLang.Compilers.RegisterTarget
 
                             method.MarkLabel(localTarget);
                             method.LoadLocal(stkHd);
-                            method.LoadConstant(1);
-                            method.Subtract();
                             method.LoadConstant(Constants.frameSize);
                             method.Multiply();
                             method.StoreLocal(correction);
@@ -564,7 +550,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Gt.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -580,7 +566,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Lt.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -596,7 +582,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Eq.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));
@@ -612,7 +598,7 @@ namespace iLang.Compilers.RegisterTarget
 
                     if (instruction.Op.OpCode == Mod.OpCode)
                     {
-                        if (instruction.Operands[0] is Value value1 && instruction.Operands[1] is Value value2 && instruction.Operands[2] is Value destination)
+                        if (instruction.Operands[0] is Value destination && instruction.Operands[1] is Value value1 && instruction.Operands[2] is Value value2)
                         {
                             method.LoadLocal(GetLocal(value1.Number));
                             method.LoadLocal(GetLocal(value2.Number));

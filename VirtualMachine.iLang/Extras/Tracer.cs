@@ -40,7 +40,7 @@ namespace VirtualMachine.iLang.Extras
             if(stackCallSize >= 0)
             {
                 int[] stackFrame = state.Memory[(stackFrameSize * stackCallSize)..(stackFrameSize * stackCallSize + stackFrameSize)];
-                sb.Append($"MEM: {fixedLength(string.Join(" ", stackFrame), 50)} ");
+                sb.Append($"MEM: {fixedLength(string.Join(" ", stackFrame), 25)} ");
             }
             string trace = sb.ToString();
 
