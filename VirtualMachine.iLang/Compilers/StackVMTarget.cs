@@ -166,9 +166,91 @@ namespace iLang.Compilers.StacksCompiler
                 return reachabilityAnalysis;
             }
 
+            internal static void EmitTrace(Emit<Func<int>> method, Opcode<Stacks> instruction, int pc, Local memory, Local stackFrame)
+            {
+                using Local stackSlice = method.DeclareLocal<int[]>();
+                method.LoadConstant(instruction.Op.Metadata.ArgumentCount);
+                method.NewArray<int>();
+                method.StoreLocal(stackSlice);
+                
+                using Local traceLine = method.DeclareLocal<string>("traceLine");
+                method.LoadConstant($"{pc}: {instruction} ");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+
+                method.LoadConstant($"stack: [");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                for (int i = 0; i < instruction.Op.Metadata.ArgumentCount; i++)
+                {
+                    using Local dump = method.DeclareLocal<int>();
+                    method.StoreLocal(dump);
+
+                    method.LoadLocal(stackSlice);
+                    method.LoadConstant(i);
+                    method.LoadLocal(dump);
+                    method.StoreElement<int>();
+
+                    method.LoadLocal(dump);
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
+                    method.LoadConstant($", ");
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                }
+
+                for (int i = instruction.Op.Metadata.ArgumentCount - 1; i >= 0 ; i--)
+                {
+                    method.LoadLocal(stackSlice);
+                    method.LoadConstant(i);
+                    method.LoadElement<int>();
+                }
+
+                method.LoadConstant($"], g-mem: [");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                for (int i = Constants.globalFrame.Start.Value; i < Constants.globalFrame.Start.Value + 8; i++)
+                {
+                    method.LoadLocal(memory);
+                    method.LoadConstant(i);
+                    method.LoadElement<int>();
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
+                    method.LoadConstant($", ");
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                }
+
+                method.LoadConstant($"], l-mem: [");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                
+                Label skipIfInDriver = method.DefineLabel();
+                method.LoadLocal(stackFrame);
+                method.BranchIfFalse(skipIfInDriver);
+                
+                for (int i = 0; i < 8; i++)
+                {
+                    using Local indexLcl = method.DeclareLocal<int>();
+
+                    method.LoadLocal(memory);
+                    method.LoadLocal(stackFrame);
+                    method.LoadConstant(Constants.frameSize);
+                    method.Multiply();
+                    method.LoadConstant(i);
+                    method.Add();
+                    method.StoreLocal(indexLcl);
+                    
+                    method.LoadLocal(indexLcl);
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
+
+                    method.LoadLocal(indexLcl);
+                    method.LoadElement<int>();
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
+                    method.LoadConstant($", ");
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                }
+
+                method.MarkLabel(skipIfInDriver);
+
+                method.LoadConstant("]\n");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+            }
             public static Func<int> ToMethodInfo(byte[] bytecodeInput)
             {
-                Emit<Func<int>> method = Emit<Func<int>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
+                Emit<Func<int>> method = Emit<Func<int>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: false, strictBranchVerification: true);
 
                 Label returnTable = method.DefineLabel();
                 Label exitLabel = method.DefineLabel();
@@ -206,12 +288,7 @@ namespace iLang.Compilers.StacksCompiler
                         method.MarkLabel(labels[pc]);
                     }
 
-
-                    using Local traceLine = method.DeclareLocal<string>("traceLine");
-                    method.LoadConstant($"{pc}: {instruction}");
-                    method.StoreLocal(traceLine);
-                    method.LoadLocal(traceLine);
-                    method.Call(typeof(Console).GetMethod("WriteLine", [typeof(string)]));
+                    EmitTrace(method, instruction, pc, mem, stkHd);
 
                     if (instruction.Op.Metadata.ArgumentCount > 0)
                     {
@@ -321,8 +398,7 @@ namespace iLang.Compilers.StacksCompiler
                         method.StoreLocal(offset);
 
                         method.LoadLocal(isGlobal);
-                        method.LoadConstant(0);
-                        method.BranchIfEqual(localTarget);
+                        method.BranchIfFalse(localTarget);
 
                         method.LoadConstant(Constants.globalFrame.Start.Value);
                         method.StoreLocal(correction);
@@ -365,8 +441,7 @@ namespace iLang.Compilers.StacksCompiler
                         method.StoreLocal(value);
 
                         method.LoadLocal(isGlobal);
-                        method.LoadConstant(0);
-                        method.BranchIfEqual(localTarget);
+                        method.BranchIfFalse(localTarget);
 
 
                         method.LoadConstant(Constants.globalFrame.Start.Value);

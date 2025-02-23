@@ -10,6 +10,8 @@ using VirtualMachine.Instruction;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Runtime;
 using System.Collections;
+using System.Diagnostics;
+using Microsoft.Diagnostics.Tracing.StackSources;
 namespace iLang.Compilers.RegisterTarget
 {
     public static class Compiler
@@ -111,9 +113,6 @@ namespace iLang.Compilers.RegisterTarget
                         var instruction = metadata.Op;
                         var operands = metadata.Operands;
 
-
-                        Console.WriteLine($"Analyzing {metadata}");
-
                         reachabilityAnalysis[index] = true;
 
                         if (instruction.OpCode == Call.OpCode)
@@ -165,6 +164,56 @@ namespace iLang.Compilers.RegisterTarget
                 return reachabilityAnalysis;
             }
 
+            internal static void EmitTrace(Emit<Func<int>> method, Opcode<Registers> instruction, int pc, Local[] registers, Local memory, Local stackFrame) 
+            {
+
+                using Local traceLine = method.DeclareLocal<string>("traceLine");
+                method.LoadConstant($"{pc}: {instruction} ");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+
+                method.LoadConstant($"regs: [");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                foreach (var reg in registers)
+                {
+                    method.LoadLocal(reg);
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
+                    method.LoadConstant($", ");
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                }
+                method.LoadConstant($"], g-mem: [");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                for (int i = Constants.globalFrame.Start.Value; i < Constants.globalFrame.Start.Value + 8; i++)
+                {
+                    method.LoadLocal(memory);
+                    method.LoadConstant(i);
+                    method.LoadElement<int>();
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
+                    method.LoadConstant($", ");
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                }
+                method.LoadConstant("]\n");
+
+
+                method.LoadConstant($"], l-mem: [");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                for (int i = 0; i < 8; i++)
+                {
+                    method.LoadLocal(memory);
+                    method.LoadLocal(stackFrame);
+                    method.LoadConstant(1);
+                    method.Subtract();
+                    method.LoadConstant(Constants.frameSize);
+                    method.Multiply();
+                    method.LoadConstant(i);
+                    method.Add();
+                    method.LoadElement<int>();
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(int)]));
+                    method.LoadConstant($", ");
+                    method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+                }
+                method.LoadConstant("]\n");
+                method.Call(typeof(Console).GetMethod("Write", [typeof(string)]));
+            }
             public static Func<int> ToMethodInfo(byte[] bytecodeInput)
             {
                 Emit<Func<int>> method = Emit<Func<int>>.NewDynamicMethod(Guid.NewGuid().ToString(), doVerify: true, strictBranchVerification: true);
@@ -184,13 +233,6 @@ namespace iLang.Compilers.RegisterTarget
                 using Local cjc = method.DeclareLocal<int>("cjc");
                 using Local cjo = method.DeclareLocal<int>("cjo");
                 using Local mof = method.DeclareLocal<int>("mof");
-
-                /*
-                using Local regDump = method.DeclareLocal<int[]>("regDump");
-                method.LoadConstant(4);
-                method.NewArray<int>();
-                method.StoreLocal(regDump);
-                */
 
                 using Local mem = method.DeclareLocal<int[]>("mem");
                 method.LoadConstant(1024);
@@ -238,14 +280,7 @@ namespace iLang.Compilers.RegisterTarget
                         method.MarkLabel(labels[pc]);
                     }
 
-
-                    using Local traceLine = method.DeclareLocal<string>("traceLine");
-                    method.LoadConstant($"{pc}: {instruction}");
-                    method.StoreLocal(traceLine);
-                    method.LoadLocal(traceLine);
-                    method.Call(typeof(Console).GetMethod("WriteLine", [typeof(string)]));
-                    method.LoadLocal(eax);
-                    method.Call(typeof(Console).GetMethod("WriteLine", [typeof(int)]));
+                    EmitTrace(method, instruction, pc, [eax, ebx, ecx, edx], mem, stkHd);
 
                     if (instruction.Op.OpCode == Mov.OpCode)
                     {
